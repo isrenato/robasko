@@ -12,9 +12,6 @@ import (
 	"time"
 
 	"github.com/isrenato/robasko/internal/config"
-	"github.com/isrenato/robasko/internal/inventory"
-	"github.com/isrenato/robasko/internal/requirements/keyword"
-	"github.com/isrenato/robasko/internal/scoring"
 	"github.com/isrenato/robasko/internal/sources"
 	"github.com/isrenato/robasko/internal/sources/boardapi"
 	"github.com/isrenato/robasko/internal/store"
@@ -27,14 +24,12 @@ func main() {
 		where   = flag.String("where", "", "match against the location")
 		limit   = flag.Int("limit", 10, "stop after this many vacancies, 0 for all")
 		full    = flag.Bool("full", false, "print the whole advertisement text")
-		score   = flag.Bool("score", false, "score each vacancy against the inventory")
-		invPath = flag.String("inventory", "inventory.example.yaml", "inventory file to score against")
 		save    = flag.Bool("save", false, "store the vacancies, skipping ones already held")
 		migrate = flag.Bool("migrate", false, "apply pending migrations and exit")
 	)
 	flag.Parse()
 
-	opts := options{full: *full, score: *score, inventoryPath: *invPath, save: *save, migrate: *migrate}
+	opts := options{full: *full, save: *save, migrate: *migrate}
 	if err := run(*envFile, sources.Query{What: *what, Where: *where, Limit: *limit}, opts); err != nil {
 		fmt.Fprintf(os.Stderr, "fetch: %v\n", err)
 		os.Exit(1)
@@ -42,11 +37,9 @@ func main() {
 }
 
 type options struct {
-	full          bool
-	score         bool
-	inventoryPath string
-	save          bool
-	migrate       bool
+	full    bool
+	save    bool
+	migrate bool
 }
 
 // openStore connects using DATABASE_URL from the env file or the process
@@ -116,18 +109,6 @@ func run(envFile string, q sources.Query, opts options) error {
 		defer st.Close()
 	}
 
-	var inv *inventory.Inventory
-	if opts.score {
-		inv, err = inventory.Load(opts.inventoryPath)
-		if err != nil {
-			return err
-		}
-		fmt.Printf("scoring against %s (%d entries)\n", opts.inventoryPath, len(inv.Entries))
-		fmt.Println("requirements are matched by inventory alias, not by a model:")
-		fmt.Println("a demand the inventory cannot name is invisible here, so these")
-		fmt.Println("scores read high. See internal/requirements/keyword.")
-		fmt.Println()
-	}
 	configured, err := config.Sources(look)
 	if err != nil {
 		return err
@@ -186,47 +167,15 @@ func run(envFile string, q sources.Query, opts options) error {
 				fmt.Printf("    tags: %s\n", strings.Join(v.Tags, ", "))
 			}
 			fmt.Printf("    %s\n", v.URL)
-			if opts.score {
-				printScore(v.Text, inv)
-			}
 			if opts.full {
 				fmt.Printf("\n%s\n", v.Text)
-			} else if !opts.score {
+			} else {
 				fmt.Printf("    %s\n", excerpt(v.Text, 150))
 			}
 			fmt.Println()
 		}
 	}
 	return nil
-}
-
-// printScore extracts requirements, scores them and prints the table that
-// makes the number explainable: one line per requirement, each naming the
-// inventory entry it was matched against.
-func printScore(text string, inv *inventory.Inventory) {
-	reqs := keyword.Extract(text, inv)
-	res := scoring.Compute(reqs, scoring.Options{})
-
-	fmt.Printf("    SCORE %.1f", res.Score)
-	fmt.Printf("   must %.2f (%d)   nice %.2f (%d)",
-		res.MustCoverage, res.MustCount, res.NiceCoverage, res.NiceCount)
-	if res.CappedReason != "" {
-		fmt.Printf("   capped: %s", res.CappedReason)
-	}
-	fmt.Println()
-
-	if len(reqs) == 0 {
-		fmt.Println("      no inventory entry is mentioned in this advertisement")
-		return
-	}
-	fmt.Printf("      %-5s %5s  %-14s %s\n", "kind", "cover", "id", "requirement")
-	for _, r := range reqs {
-		fmt.Printf("      %-5s %5.2f  %-14s %s\n",
-			r.Kind, r.Coverage, strings.Join(r.IDs, ","), excerpt(r.Text, 60))
-	}
-	if len(res.MustGaps) > 0 {
-		fmt.Printf("      must-gaps: %d\n", len(res.MustGaps))
-	}
 }
 
 func excerpt(s string, n int) string {

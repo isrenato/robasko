@@ -184,3 +184,55 @@ func TestReportsMissingHome(t *testing.T) {
 		t.Errorf("got %v, want ErrNoHome", err)
 	}
 }
+
+// A generated letter carries a name, an address and an employment history.
+// It must land outside the published tree no matter how the process was
+// started.
+func TestLettersDirectoryIsOutsideTheRepository(t *testing.T) {
+	clearEnv(t)
+	root := t.TempDir()
+	repo := t.TempDir()
+	t.Setenv("ROBASKO_DATA_DIR", root)
+
+	dir, err := Letters(repo)
+	if err != nil {
+		t.Fatalf("Letters: %v", err)
+	}
+	if !strings.HasPrefix(dir, filepath.Clean(root)) {
+		t.Errorf("letters land at %q, outside the data root %q", dir, root)
+	}
+	if inside, _ := isInside(dir, repo); inside {
+		t.Errorf("letters land inside the repository: %q", dir)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("directory not created: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o700 {
+		t.Errorf("mode %04o, want 0700", perm)
+	}
+}
+
+// If the data root is misconfigured into the working tree, writing a letter
+// must fail rather than quietly place one where git can see it.
+func TestLettersRefuseARootInsideTheRepository(t *testing.T) {
+	clearEnv(t)
+	repo := t.TempDir()
+	t.Setenv("ROBASKO_DATA_DIR", filepath.Join(repo, "data"))
+
+	if _, err := Letters(repo); !errors.Is(err, ErrRootInsideRepo) {
+		t.Errorf("got %v, want ErrRootInsideRepo", err)
+	}
+}
+
+func TestSubdirRejectsNamesThatEscapeTheRoot(t *testing.T) {
+	clearEnv(t)
+	t.Setenv("ROBASKO_DATA_DIR", t.TempDir())
+
+	for _, name := range []string{"", "..", "a/b", "/etc", filepath.Join("..", "escape")} {
+		if _, err := Subdir(repoOutside(t), name); err == nil {
+			t.Errorf("%q was accepted", name)
+		}
+	}
+}

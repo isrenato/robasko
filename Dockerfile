@@ -3,7 +3,7 @@
 #
 # Dependencies are vendored into the repository, so the build resolves
 # nothing over the network and needs no separate download layer.
-FROM golang:1.23-alpine AS build
+FROM golang:1.25-alpine AS build
 
 WORKDIR /src
 COPY . .

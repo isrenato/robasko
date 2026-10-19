@@ -74,7 +74,7 @@ services:
   #
   go:
     profiles: ["dev"]
-    image: golang:1.23-alpine
+    image: golang:1.25-alpine
     working_dir: /src
     entrypoint: ["go"]
     environment:

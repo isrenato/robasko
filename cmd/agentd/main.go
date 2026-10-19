@@ -22,9 +22,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
 	"github.com/isrenato/robasko/internal/paths"
+	"github.com/isrenato/robasko/internal/store"
 )
 
 // roles are the agent roles from SPEC.md §8.
@@ -82,12 +81,28 @@ func run(role, addr string) error {
 
 	var db pinger
 	if dsn := os.Getenv("DATABASE_URL"); dsn != "" {
-		pool, err := pgxpool.New(ctx, dsn)
+		st, err := store.Open(ctx, dsn)
 		if err != nil {
-			return fmt.Errorf("configuring the database pool: %w", err)
+			return err
 		}
-		defer pool.Close()
-		db = pool
+		defer st.Close()
+
+		// The schema is applied here rather than by a separate command, so
+		// that bringing the stack up is one step and a fresh database is
+		// never served against. Concurrent roles are safe: Migrate takes an
+		// advisory lock, and the ones that lose the race find nothing to do.
+		applied, err := st.Migrate(ctx)
+		if err != nil {
+			return fmt.Errorf("applying migrations: %w", err)
+		}
+		for _, name := range applied {
+			log.Info("migration applied", "name", name)
+		}
+		if len(applied) == 0 {
+			log.Info("schema up to date")
+		}
+
+		db = st.Pool()
 	} else {
 		log.Warn("DATABASE_URL is not set; readiness will report unavailable")
 	}

@@ -1,0 +1,61 @@
+# ---------------------------------------------------------------------------
+# Default-deny. Everything is ignored; the allowlist below names what is
+# published. A new file is untracked until it is added here on purpose, so the
+# failure direction is omission rather than disclosure.
+#
+# `!*/` is load-bearing: without it git never descends into subdirectories and
+# none of the allowlist entries below the top level can match.
+#
+# Private artifacts (the real CV, inventory, profile, letters, caches, logs)
+# live outside this tree entirely, under the data root resolved by
+# internal/paths. The rules here are the second layer, not the first.
+# ---------------------------------------------------------------------------
+
+*
+!*/
+
+# --- repository metadata ---
+!/.dockerignore
+!/.gitignore
+!/Dockerfile
+!/Makefile
+!/README.md
+!/docker-compose.yml
+!/.env.example
+!/go.mod
+!/go.sum
+!/Dockerfile
+!/.dockerignore
+
+# --- source ---
+!/cmd/**
+!/internal/**
+!/migrations/**
+!/scripts/**
+!/.githooks/**
+
+# --- planning artifacts ---
+!/SPEC.md
+!/openspec/**
+
+# Vendored dependencies: committed so a clean clone builds and tests
+# without network, as SPEC.md 20 requires.
+!/vendor/**
+
+# --- example artifacts: invented contents, published to show the formats ---
+!/cv/example.md
+!/inventory.example.yaml
+!/profile.example.yaml
+
+# --- re-deny inside allowlisted trees ---
+# The protected-literal list is read by the pre-commit hook from the private
+# data root. Should a copy ever land beside the hook, it is not published.
+/.githooks/protected-literals*
+
+# Build output and editor state, even where allowlisted above.
+/cmd/**/*.exe
+*.test
+*.out
+.DS_Store
+.idea/
+.vscode/

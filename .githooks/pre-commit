@@ -1,0 +1,9 @@
+#!/bin/sh
+# Reject a commit carrying a protected literal.
+#
+# The literal list lives in the private data root, not here: it is the very
+# data the check exists to keep out of this repository. Without a list the
+# check warns and passes, so a clone by anyone else still commits normally.
+#
+# Install with: make hooks
+exec go run ./cmd/protect "$@"

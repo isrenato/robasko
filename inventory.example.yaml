@@ -1,0 +1,103 @@
+# EXAMPLE ARTIFACT - invented contents.
+#
+# Published to show the inventory format and its level scheme. The real
+# inventory lives under the private data root and is never committed: filled
+# in truthfully it is an itemised public list of its author's skill gaps.
+#
+# level semantics, in descending coverage:
+#   production  1.0  shipped and maintained it in production
+#   used        0.8  built real things with it, not owned in production
+#   managed     0.4  led people who did it; did not write the code
+#   learning    0.2  actively learning, nothing shipped
+#   none        0.0  no exposure - kept deliberately, see below
+#
+# `none` entries are not omissions. An absent id and an id at `none` score
+# identically, but the `none` entry states the gap out loud and gives
+# inventory.audit somewhere to attach demand it cannot otherwise name.
+
+- id: php
+  kind: language
+  aliases: [php, php8, "php 8", php-mvc]
+  level: production
+  evidence: "Eleven years; Symfony monolith at Kastanienhof Verlag, 2017-2021"
+  last_used_year: 2024
+
+- id: go
+  kind: language
+  aliases: [go, golang, "go lang"]
+  level: production
+  evidence: "Shipment tracking service at Nordwind Logistik, 2021-present"
+  last_used_year: 2026
+
+- id: postgres
+  kind: db
+  aliases: [postgres, postgresql, psql, "postgre sql"]
+  level: production
+  evidence: "Owned schema and migrations for the tracking domain; led the
+    MySQL 5.7 to PostgreSQL 13 migration without downtime"
+  last_used_year: 2026
+
+- id: elasticsearch
+  kind: db
+  aliases: [elasticsearch, elastic, es, opensearch]
+  level: used
+  evidence: "Catalogue search at Kastanienhof Verlag; built it, never on-call
+    for the cluster itself"
+  last_used_year: 2021
+
+- id: terraform
+  kind: cloud
+  aliases: [terraform, tf, "infrastructure as code", iac]
+  level: used
+  evidence: "Wrote the ECS and SQS modules for the tracking service"
+  last_used_year: 2025
+
+- id: python
+  kind: language
+  aliases: [python, py, python3]
+  level: managed
+  evidence: "Led the two-person data tooling team for eighteen months at
+    Nordwind; reviewed the code, did not write it"
+  last_used_year: 2024
+
+- id: kubernetes
+  kind: cloud
+  aliases: [kubernetes, k8s, kubectl, helm]
+  level: learning
+  evidence: "Working through the CKA material; nothing in production"
+  last_used_year: 2026
+
+- id: kafka
+  kind: framework
+  aliases: [kafka, "apache kafka"]
+  level: none
+  evidence: ""
+
+- id: react
+  kind: framework
+  aliases: [react, reactjs, "react.js"]
+  level: none
+  evidence: ""
+
+- id: german
+  kind: language_skill
+  aliases: [deutsch, german, "deutschkenntnisse"]
+  level: production
+  evidence: "Native speaker"
+  last_used_year: 2026
+  cefr: C2
+
+- id: english
+  kind: language_skill
+  aliases: [english, englisch]
+  level: used
+  evidence: "Working language at Nordwind; all documentation and code review"
+  last_used_year: 2026
+  cefr: C1
+
+- id: tdd
+  kind: practice
+  aliases: [tdd, "test driven development", "testgetriebene entwicklung"]
+  level: production
+  evidence: "Default working style since 2017; introduced it to two teams"
+  last_used_year: 2026

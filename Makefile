@@ -1,7 +1,7 @@
 # Two classes of target, kept apart on purpose.
 #
 # The Go targets need nothing but a Go toolchain and never touch the network:
-# the module has no dependencies, so `make test` works on a clean clone and
+# dependencies are vendored, so `make test` works on a clean clone and
 # offline, which is what SPEC.md 20 requires.
 #
 # The Docker targets need a daemon, and the first run of a containerised one

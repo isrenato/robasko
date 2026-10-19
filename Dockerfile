@@ -1,13 +1,16 @@
 # Build every command in cmd/ into a static binary, then ship them in an
 # image with no shell, no package manager and no compiler.
 #
-# Dependencies are vendored into the repository, so the build resolves
-# nothing over the network and needs no separate download layer.
+# Dependency resolution sits above the source copy so that editing a source
+# file does not re-resolve modules.
 FROM golang:1.25-alpine AS build
 
 WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
-RUN CGO_ENABLED=0 go build -mod=vendor -trimpath -ldflags="-s -w" -o /out/ ./cmd/...
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./cmd/...
 
 FROM gcr.io/distroless/static-debian12:nonroot
 

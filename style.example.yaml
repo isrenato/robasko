@@ -1,0 +1,144 @@
+# EXAMPLE ARTIFACT - invented contents.
+#
+# Published to show the format. The real style.yaml lives under the private
+# data root and is never committed.
+#
+# This file is the single source of how a letter is written; profile.yaml is
+# the single source of what it may claim. Every claim is checked against
+# profile and inventory ids by the fact lock; nothing here is checked at all
+# - it shapes the prose and that is all it does.
+#
+# SCOPE. This file does not try to stop the draft sounding machine-written.
+# That is the `humanizer` skill's job, and it does it properly - numbered
+# patterns for not-X-but-Y contrasts, one-line closers, forced triads,
+# dashes by rule, inflated claims - from Wikipedia's "Signs of AI writing".
+# Run the draft through it before the PDF renderer. Duplicating a worse
+# version of that list here would mean two places to maintain and one of
+# them wrong.
+#
+# What is left is what humanizer cannot know: the register of a German
+# business letter, what this project may and may not claim, and your voice.
+#
+# Expect to edit it from results. Three letters, no replies, change the
+# opening. That should not be a code change, which is why it lives here.
+
+# ---------------------------------------------------------------------------
+# Register and the fixed parts of the letter (SPEC.md §13.2)
+# ---------------------------------------------------------------------------
+languages:
+  de:
+    address_as: Sie          # never du, at any seniority
+    salutation:
+      gendered_female: "Sehr geehrte Frau {last_name},"
+      gendered_male: "Sehr geehrter Herr {last_name},"
+      # A name whose gender the advertisement does not give is addressed
+      # without guessing one.
+      ungendered: "Guten Tag {first_name} {last_name},"
+      no_contact: "Liebes {company}-Team,"
+    closing: "Mit freundlichen Grüßen"
+    date_format: "2. January 2006"
+
+  en:
+    address_as: you
+    salutation:
+      gendered_female: "Dear Ms {last_name},"
+      gendered_male: "Dear Mr {last_name},"
+      ungendered: "Dear {first_name} {last_name},"
+      no_contact: "Dear {company} team,"
+    closing: "Kind regards"
+    date_format: "2 January 2006"
+
+# ---------------------------------------------------------------------------
+# Length
+#
+# scripts/build_letter.py exits 2 when the text does not fit one page. The
+# draft then shortens the lowest-weighted paragraph and retries at most
+# twice before the letter is marked needs_human, so aim under these numbers
+# and the retry rarely fires.
+# ---------------------------------------------------------------------------
+length:
+  max_pages: 1
+  target_words: 240
+  max_words: 300
+  paragraphs: [3, 4]
+
+# ---------------------------------------------------------------------------
+# Structure
+#
+# `weight` is what the shortening retry reads: the lowest weight is cut
+# first, so the paragraph carrying the strongest evidence must outrank the
+# one explaining motivation.
+# ---------------------------------------------------------------------------
+structure:
+  - id: opening
+    weight: 3
+    intent: >
+      Name the role and say what in the advertisement this answers.
+    sentences: [1, 2]
+
+  - id: evidence
+    weight: 5
+    intent: >
+      The strongest two or three requirements from the advertisement, each
+      answered with something actually done. One claim per sentence, so a
+      sentence that fails the fact lock can be cut without taking a good
+      claim with it.
+    sentences: [3, 5]
+
+  - id: fit
+    weight: 2
+    intent: >
+      Why this employer rather than any employer, drawn from the
+      advertisement itself. Omit the paragraph when the advertisement gives
+      nothing specific to answer - an invented reason reads worse than none.
+    sentences: [1, 3]
+    optional: true
+
+  - id: close
+    weight: 4
+    intent: >
+      Availability and a plain closing line.
+    sentences: [1, 2]
+
+# ---------------------------------------------------------------------------
+# Claims
+#
+# These are not matters of taste. Each one is a way a letter can say
+# something the evidence does not support, which the fact lock cannot catch
+# because the id cited is real - only the strength of the claim is wrong.
+# ---------------------------------------------------------------------------
+claims:
+  - "Never name a technology absent from either the advertisement or the inventory."
+  - "Never state a level above what the inventory records. A skill held at `managed` is described as leading the work, not doing it."
+  - "Prefer the work to the responsibility: what was built, not what one was responsible for."
+  - "Use a number where profile.yaml holds one, and no number where it does not."
+  - "No claims about character - nothing sources teamfähig, motiviert, passionate."
+  - "Nice-to-have gaps are not mentioned at all (SPEC.md §13.4)."
+  - "No salary, notice period or availability date unless profile.yaml holds one."
+  - "Never mention the score, the matching, or that the letter was generated."
+
+# ---------------------------------------------------------------------------
+# Letter clichés
+#
+# Not AI tells - these predate the models and are specific to German
+# application letters, so humanizer has no reason to carry them. Matched
+# case-insensitively; a hit is a rewrite, not a rejection.
+# ---------------------------------------------------------------------------
+tired_openings:
+  - "hiermit bewerbe ich mich"
+  - "mit großem Interesse habe ich Ihre Anzeige gelesen"
+  - "wie Sie meinem Lebenslauf entnehmen können"
+  - "ich würde mich sehr freuen"
+  - "über eine Einladung zu einem persönlichen Gespräch würde ich mich freuen"
+
+# ---------------------------------------------------------------------------
+# Voice
+#
+# Replace with a paragraph of your own writing. The humanizer skill matches
+# a supplied sample over its own defaults, so a real sample here is worth
+# more than any list of adjectives.
+# ---------------------------------------------------------------------------
+voice_sample: >
+  Replace this with two or three sentences you actually wrote - from an
+  email, a README, anything unedited. Sentence length, punctuation and how
+  you open are what get matched; a description of your tone is not.

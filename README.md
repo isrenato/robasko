@@ -261,9 +261,10 @@ make test      # Go only, offline
 make up        # Postgres 16 in Docker, waits until it is ready
 ```
 
-The Go targets (`test`, `vet`, `fmt`, `check`, `hooks`) need nothing but a
-Go toolchain and never touch the network: dependencies are vendored into the
-repository, so the tests run on a clean clone and offline.
+The Go targets (`test`, `vet`, `fmt`, `check`, `hooks`) need a Go toolchain
+and the module cache. The tests themselves make no network calls — recorded
+fixtures stand in for the model — but a clean clone resolves dependencies
+once through `go mod download`.
 
 The Docker targets need a daemon. `up`, `down`, `logs`, `psql` and `run`
 drive the stack.
@@ -331,5 +332,5 @@ published, and a letter is a biography.
 Liveness does not touch the database on purpose: a database outage should
 not make the orchestrator restart processes that are working.
 
-Dependencies are vendored, so `go test ./...` passes on a clean clone with
-no network.
+`go test ./...` makes no network calls: the model client is replayed from
+recorded fixtures. Dependencies resolve once through the module cache.

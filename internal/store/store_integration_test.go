@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/isrenato/robasko/internal/scoring"
 	"github.com/isrenato/robasko/migrations"
 )
 
@@ -181,5 +182,101 @@ func TestConcurrentMigrationsDoNotRace(t *testing.T) {
 	if applied != 0 && applied != len(files) {
 		t.Errorf("%d migrations applied across %d processes; want 0 (already migrated) or %d (fresh), and never more",
 			applied, racers, len(files))
+	}
+}
+
+// Re-scoring replaces the whole result. A requirement table left half
+// rewritten would no longer explain the score stored beside it, which is
+// the only reason to keep the table at all.
+func TestSaveScoreReplacesThePreviousResult(t *testing.T) {
+	s := openTest(t)
+	ctx := context.Background()
+
+	v := Vacancy{
+		Source: "board-score", SourceID: "s-" + time.Now().Format("150405.000000000"),
+		Title:   "Scored " + time.Now().Format("150405.000000000"),
+		Company: "Testfirma Scoring GmbH", City: "Teststadt", Remote: "remote",
+		Text: "We are looking for you with experience",
+	}
+	if _, err := s.Save(ctx, []Vacancy{v}); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	var id string
+	if err := s.pool.QueryRow(ctx,
+		`SELECT id FROM vacancies WHERE source = $1 AND source_id = $2`,
+		v.Source, v.SourceID).Scan(&id); err != nil {
+		t.Fatalf("finding the vacancy: %v", err)
+	}
+
+	first := Scored{
+		VacancyID: id,
+		Requirements: []scoring.Requirement{
+			{Text: "Go", Kind: scoring.Must, IDs: []string{"go"}, Coverage: 1},
+			{Text: "Kafka", Kind: scoring.Must, Coverage: 0},
+			{Text: "Nice one", Kind: scoring.Nice, Coverage: 0.8},
+		},
+		Categories:      []string{"language", "framework", "practice"},
+		Result:          scoring.Result{Score: 70, MustCoverage: 0.5, MustCount: 2, NiceCount: 1, MustGaps: []string{"Kafka"}, CappedReason: "1 must-have(s) not covered"},
+		Model:           "test-model",
+		InventoryDigest: "digest-one",
+	}
+	if err := s.SaveScore(ctx, first); err != nil {
+		t.Fatalf("SaveScore: %v", err)
+	}
+
+	assertCounts := func(wantReqs int, wantScore float64, wantDigest string) {
+		t.Helper()
+		var n int
+		if err := s.pool.QueryRow(ctx,
+			`SELECT count(*) FROM requirements WHERE vacancy_id = $1`, id).Scan(&n); err != nil {
+			t.Fatalf("counting requirements: %v", err)
+		}
+		if n != wantReqs {
+			t.Errorf("got %d requirements, want %d", n, wantReqs)
+		}
+		var score float64
+		var digest string
+		if err := s.pool.QueryRow(ctx,
+			`SELECT score, coalesce(inventory_digest,'') FROM scores WHERE vacancy_id = $1`, id,
+		).Scan(&score, &digest); err != nil {
+			t.Fatalf("reading the score: %v", err)
+		}
+		if score != wantScore || digest != wantDigest {
+			t.Errorf("got score %.1f digest %q, want %.1f %q", score, digest, wantScore, wantDigest)
+		}
+	}
+	assertCounts(3, 70, "digest-one")
+
+	// Scoring again against a changed inventory: fewer requirements, a
+	// different number, and nothing left over from the first run.
+	second := first
+	second.Requirements = first.Requirements[:1]
+	second.Categories = first.Categories[:1]
+	second.Result = scoring.Result{Score: 100, MustCoverage: 1, MustCount: 1}
+	second.InventoryDigest = "digest-two"
+	if err := s.SaveScore(ctx, second); err != nil {
+		t.Fatalf("second SaveScore: %v", err)
+	}
+	assertCounts(1, 100, "digest-two")
+
+	// A scored vacancy leaves the "new" bucket.
+	var status string
+	if err := s.pool.QueryRow(ctx, `SELECT status FROM vacancies WHERE id = $1`, id).Scan(&status); err != nil {
+		t.Fatalf("reading status: %v", err)
+	}
+	if status != "scored" {
+		t.Errorf("status is %q, want scored", status)
+	}
+
+	// And it drops out of the unscored queue.
+	pending, err := s.Unscored(ctx, 100)
+	if err != nil {
+		t.Fatalf("Unscored: %v", err)
+	}
+	for _, p := range pending {
+		if p.ID == id {
+			t.Error("a scored vacancy is still listed as unscored")
+		}
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/isrenato/robasko/internal/reference"
+	"github.com/isrenato/robasko/internal/scoring"
 	"github.com/isrenato/robasko/migrations"
 )
 
@@ -291,3 +292,127 @@ func (s *Store) StaleFingerprints(ctx context.Context) (int, error) {
 // Pool exposes the connection pool for packages that own their own
 // queries, such as the tool registry.
 func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+
+// Scored is one vacancy's result, ready to be stored.
+type Scored struct {
+	VacancyID       string
+	Requirements    []scoring.Requirement
+	Categories      []string // parallel to Requirements; "" where unknown
+	Result          scoring.Result
+	Model           string
+	InventoryDigest string
+}
+
+// SaveScore stores a vacancy's requirement table and its score.
+//
+// The whole result replaces any previous one in a single transaction:
+// re-scoring a vacancy against a changed inventory must not leave half the
+// old requirement table behind, which would make the stored score
+// unexplainable by the rows meant to explain it.
+func (s *Store) SaveScore(ctx context.Context, sc Scored) error {
+	return s.inTx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx,
+			`DELETE FROM requirements WHERE vacancy_id = $1`, sc.VacancyID); err != nil {
+			return fmt.Errorf("clearing requirements: %w", err)
+		}
+
+		for i, r := range sc.Requirements {
+			var category *string
+			if i < len(sc.Categories) && sc.Categories[i] != "" {
+				category = &sc.Categories[i]
+			}
+			ids := r.IDs
+			if ids == nil {
+				ids = []string{}
+			}
+			if _, err := tx.Exec(ctx, `
+				INSERT INTO requirements
+					(vacancy_id, seq, text, kind, category, canonical_ids, coverage)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+				sc.VacancyID, i, r.Text, string(r.Kind), category, ids, r.Coverage,
+			); err != nil {
+				return fmt.Errorf("inserting requirement %d: %w", i, err)
+			}
+		}
+
+		res := sc.Result
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO scores
+				(vacancy_id, score, must_coverage, nice_coverage, must_count,
+				 nice_count, capped_reason, must_gaps, nice_gaps, model,
+				 inventory_digest, computed_at)
+			VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''), $8, $9, NULLIF($10, ''), NULLIF($11, ''), now())
+			ON CONFLICT (vacancy_id) DO UPDATE SET
+				score = EXCLUDED.score,
+				must_coverage = EXCLUDED.must_coverage,
+				nice_coverage = EXCLUDED.nice_coverage,
+				must_count = EXCLUDED.must_count,
+				nice_count = EXCLUDED.nice_count,
+				capped_reason = EXCLUDED.capped_reason,
+				must_gaps = EXCLUDED.must_gaps,
+				nice_gaps = EXCLUDED.nice_gaps,
+				model = EXCLUDED.model,
+				inventory_digest = EXCLUDED.inventory_digest,
+				computed_at = now()`,
+			sc.VacancyID, res.Score, res.MustCoverage, res.NiceCoverage,
+			res.MustCount, res.NiceCount, res.CappedReason,
+			nonNil(res.MustGaps), nonNil(res.NiceGaps), sc.Model, sc.InventoryDigest,
+		); err != nil {
+			return fmt.Errorf("storing the score: %w", err)
+		}
+
+		// A scored vacancy leaves the review queue's "new" bucket.
+		_, err := tx.Exec(ctx,
+			`UPDATE vacancies SET status = 'scored' WHERE id = $1 AND status = 'new'`,
+			sc.VacancyID)
+		return err
+	})
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// Unscored returns vacancies that have no score yet, newest first.
+func (s *Store) Unscored(ctx context.Context, limit int) ([]StoredVacancy, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT v.id, v.title, coalesce(c.name, ''), coalesce(v.city, ''),
+		       v.remote, coalesce(v.raw_text, ''), coalesce(v.url, '')
+		FROM vacancies v
+		LEFT JOIN companies c ON c.id = v.company_id
+		LEFT JOIN scores s ON s.vacancy_id = v.id
+		WHERE s.vacancy_id IS NULL AND v.raw_text IS NOT NULL
+		ORDER BY v.created_at DESC
+		LIMIT $1`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("store: listing unscored vacancies: %w", err)
+	}
+	defer rows.Close()
+
+	var out []StoredVacancy
+	for rows.Next() {
+		var v StoredVacancy
+		if err := rows.Scan(&v.ID, &v.Title, &v.Company, &v.City, &v.Remote, &v.Text, &v.URL); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// StoredVacancy is a vacancy read back for scoring.
+type StoredVacancy struct {
+	ID      string
+	Title   string
+	Company string
+	City    string
+	Remote  string
+	Text    string
+	URL     string
+}

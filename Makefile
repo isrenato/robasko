@@ -12,7 +12,7 @@ PG_USER  := $${POSTGRES_USER:-robasko}
 PG_DB    := $${POSTGRES_DB:-robasko}
 
 .DEFAULT_GOAL := help
-.PHONY: help test vet fmt check hooks migrate up db down logs psql run test-docker vet-docker
+.PHONY: help test vet fmt check hooks migrate score up db down logs psql run test-docker vet-docker
 
 help: ## List the available targets
 	@grep -E '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -26,6 +26,9 @@ vet: ## Report suspect constructs
 
 fmt: ## Format the source tree
 	go fmt ./...
+
+score: ## Score stored vacancies with the model. Needs Postgres and credits
+	go run ./cmd/score
 
 migrate: ## Apply migrations from the host. Needs Postgres running
 	go run ./cmd/fetch -migrate

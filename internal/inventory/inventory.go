@@ -7,8 +7,11 @@
 package inventory
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -114,4 +117,20 @@ func (e *Entry) Terms() []string {
 		}
 	}
 	return out
+}
+
+// Digest identifies the inventory's contents.
+//
+// SPEC.md §5 records an inventory_version against every score. The file is
+// hand-maintained and carries no version field, and a number nobody
+// increments is worse than none; this changes exactly when the inventory
+// does, which is what the column is for.
+func (inv *Inventory) Digest() string {
+	ids := make([]string, 0, len(inv.Entries))
+	for _, e := range inv.Entries {
+		ids = append(ids, fmt.Sprintf("%s=%s", e.ID, e.Level))
+	}
+	sort.Strings(ids)
+	sum := sha256.Sum256([]byte(strings.Join(ids, "\n")))
+	return hex.EncodeToString(sum[:])[:12]
 }

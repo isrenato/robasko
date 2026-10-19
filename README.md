@@ -321,21 +321,24 @@ docker compose down -v    # stop and destroy the database
 | Storage: migrations, fingerprint dedup, company dedup | built, tested |
 | Matching vocabulary in `reference_terms` | built, tested |
 | Inventory loading and the coverage table | built, tested |
-| Scoring: must/nice split, caps, gaps | built, tested, **not yet wired** |
-| Requirement extraction, model client, fixture replay | built, tested offline; **never run against the live API** |
+| Scoring: must/nice split, caps, gaps | built, tested |
+| Extraction and mapping onto inventory ids | built, tested offline; **never run against the live API** |
+| `cmd/score`: advertisement to score, stored with its requirement table | built |
 | Tool registry: schemas, versions, scopes | built, tested |
 | Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
 | Toolchain drift guard | built, tested |
 | Queue, step state machine, handover between roles | specified, not built |
 | Demand aggregation, letters with the fact lock | specified, not built |
 
-Scoring is complete and tested but nothing calls it yet: the engine takes a
-mapped requirement list, extraction produces an unmapped one, and the step
-that maps a requirement onto inventory ids is not written.
+The pipeline is connected end to end: `cmd/score` reads a stored
+advertisement, has the model name the requirements, maps them onto
+inventory ids and computes the number, then stores the requirement table
+beside it so the score stays explainable.
 
-Extraction has never answered. Its tests replay recorded exchanges, and the
-live path got as far as a billing error — so the key and the workspace
-header work, and the request body is not yet proven.
+Neither model call has ever answered. Their tests replay recorded
+exchanges, and the live path got as far as a billing error — so the key
+and the workspace header work, and the request bodies are not yet proven.
+Until one runs, treat `cmd/score` as untested against reality.
 
 An alias-matching stand-in existed for a while and was removed. It read
 "German language is NOT necessarily required" as a satisfied demand and a
@@ -355,6 +358,7 @@ curl localhost:8080/healthz   # ok
 curl localhost:8080/readyz    # ready, or 503 when the database is down
 
 go run ./cmd/fetch -what=backend -save   # fetch and store, skipping duplicates
+go run ./cmd/score -limit=3              # read, map and score what is stored
 ```
 
 Generated letters, caches and logs are written beneath the data root

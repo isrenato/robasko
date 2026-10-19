@@ -2,9 +2,13 @@ package store
 
 import (
 	"context"
+	"io/fs"
 	"os"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/isrenato/robasko/migrations"
 )
 
 // openTest connects to the database named by ROBASKO_TEST_DATABASE_URL and
@@ -108,5 +112,74 @@ func TestSaveRecordsTheFingerprintVocabulary(t *testing.T) {
 	}
 	if stale != 0 {
 		t.Errorf("%d rows were fingerprinted under a different vocabulary", stale)
+	}
+}
+
+// SPEC.md §8 starts three agent processes at once and each applies the
+// schema on startup. Without the advisory lock this is a check-then-act
+// race: every process sees a migration as unapplied, every one runs it,
+// and the losers fail on the primary key of schema_migrations.
+func TestConcurrentMigrationsDoNotRace(t *testing.T) {
+	dsn := os.Getenv("ROBASKO_TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skip("ROBASKO_TEST_DATABASE_URL is not set")
+	}
+
+	const racers = 4
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		errs    []error
+		applied int
+	)
+
+	start := make(chan struct{})
+	for i := 0; i < racers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			s, err := Open(ctx, dsn)
+			if err != nil {
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
+				return
+			}
+			defer s.Close()
+
+			<-start // start together, to make the race likely
+			names, err := s.Migrate(ctx)
+
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+			}
+			applied += len(names)
+		}()
+	}
+	close(start)
+	wg.Wait()
+
+	for _, err := range errs {
+		t.Errorf("a concurrent migration failed: %v", err)
+	}
+
+	// The count is what proves the lock. On an up-to-date schema nobody
+	// applies anything; on a fresh one the migrations are applied exactly
+	// once in total, spread across whichever processes won. Anything above
+	// that means two processes applied the same migration, which is the
+	// failure this guards against.
+	files, err := fs.Glob(migrations.FS, "*.sql")
+	if err != nil {
+		t.Fatalf("listing migrations: %v", err)
+	}
+	if applied != 0 && applied != len(files) {
+		t.Errorf("%d migrations applied across %d processes; want 0 (already migrated) or %d (fresh), and never more",
+			applied, racers, len(files))
 	}
 }

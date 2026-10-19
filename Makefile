@@ -13,7 +13,7 @@ PG_USER  := $${POSTGRES_USER:-robasko}
 PG_DB    := $${POSTGRES_DB:-robasko}
 
 .DEFAULT_GOAL := help
-.PHONY: help test vet fmt check hooks up db down logs psql run test-docker vet-docker
+.PHONY: help test vet fmt check hooks migrate up db down logs psql run test-docker vet-docker
 
 help: ## List the available targets
 	@echo "Go only (no Docker, no network):"
@@ -37,6 +37,9 @@ vet: ## Report suspect constructs [go]
 fmt: ## Format the source tree [go]
 	go fmt ./...
 
+migrate: ## Apply pending migrations from the host [go]
+	go run ./cmd/fetch -migrate
+
 check: ## Audit every tracked file for protected literals [go]
 	go run ./cmd/protect -all
 
@@ -48,10 +51,11 @@ hooks: ## Install the pre-commit hook. Safe to re-run [go]
 # Docker
 # --------------------------------------------------------------------------
 
-up: ## Start the stack and wait until it is healthy [docker]
+up: ## Start the stack, apply migrations, wait until healthy [docker]
 	docker compose up -d --build --wait
 	@echo "postgres  localhost:$${POSTGRES_PORT:-5432}"
 	@echo "agentd    localhost:$${AGENTD_PORT:-8080}/healthz"
+	@echo "schema    applied by agentd at startup; see 'make logs'"
 
 db: ## Start only Postgres [docker]
 	docker compose up -d --wait db

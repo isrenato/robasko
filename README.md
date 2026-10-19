@@ -347,12 +347,17 @@ board's own footer as a requirement, and it could not see a demand the
 inventory had no word for, so it only ever scored high. A number that is
 wrong in one direction is worse than no number: it would have been quoted.
 
+`make up` applies the schema as well: `agentd` migrates on startup, so a
+fresh database is never served against and bringing the stack up is one
+step. Concurrent roles are safe — the migration run holds an advisory
+lock, and the processes that lose the race find nothing to do. `make
+migrate` does the same from the host when the service is not running.
+
 ```sh
 make up
 curl localhost:8080/healthz   # ok
 curl localhost:8080/readyz    # ready, or 503 when the database is down
 
-go run ./cmd/fetch -migrate              # apply migrations
 go run ./cmd/fetch -what=backend -save   # fetch and store, skipping duplicates
 ```
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -40,16 +41,45 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 
 func (s *Store) Close() { s.pool.Close() }
 
+// migrationLockKey is an arbitrary but fixed identifier for the advisory
+// lock that serialises schema changes.
+const migrationLockKey int64 = 7_735_001
+
 // Migrate applies every migration not yet recorded, in filename order, and
 // returns the names it applied. Each runs in its own transaction together
 // with the row that records it, so a failure leaves neither behind.
+//
+// The whole run is serialised by a session advisory lock. Without it this
+// is a check-then-act race, and SPEC.md §8 starts three agent processes at
+// once: each would see a migration as unapplied, each would run it, and
+// the losers would fail on the primary key of schema_migrations. The lock
+// makes the second process wait and then find nothing to do.
 func (s *Store) Migrate(ctx context.Context) ([]string, error) {
-	_, err := s.pool.Exec(ctx, `
+	// Held on one connection for the duration, so the lock outlives the
+	// per-migration transactions it is protecting.
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("store: acquiring a connection to migrate: %w", err)
+	}
+	defer conn.Release()
+
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrationLockKey); err != nil {
+		return nil, fmt.Errorf("store: taking the migration lock: %w", err)
+	}
+	defer func() {
+		// Released on its own context: the caller's may already be done.
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if _, err := conn.Exec(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrationLockKey); err != nil {
+			slog.Warn("store: releasing the migration lock", "error", err)
+		}
+	}()
+
+	if _, err := conn.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS schema_migrations (
 			name       text PRIMARY KEY,
 			applied_at timestamptz NOT NULL DEFAULT now()
-		)`)
-	if err != nil {
+		)`); err != nil {
 		return nil, fmt.Errorf("store: creating schema_migrations: %w", err)
 	}
 
@@ -62,7 +92,7 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 	var applied []string
 	for _, name := range names {
 		var exists bool
-		if err := s.pool.QueryRow(ctx,
+		if err := conn.QueryRow(ctx,
 			`SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE name = $1)`, name,
 		).Scan(&exists); err != nil {
 			return applied, fmt.Errorf("store: checking %s: %w", name, err)
@@ -75,14 +105,21 @@ func (s *Store) Migrate(ctx context.Context) ([]string, error) {
 		if err != nil {
 			return applied, err
 		}
-		if err := s.inTx(ctx, func(tx pgx.Tx) error {
-			if _, err := tx.Exec(ctx, string(body)); err != nil {
-				return err
-			}
-			_, err := tx.Exec(ctx, `INSERT INTO schema_migrations (name) VALUES ($1)`, name)
-			return err
-		}); err != nil {
+
+		tx, err := conn.Begin(ctx)
+		if err != nil {
+			return applied, err
+		}
+		if _, err := tx.Exec(ctx, string(body)); err != nil {
+			tx.Rollback(ctx) //nolint:errcheck
 			return applied, fmt.Errorf("store: applying %s: %w", name, err)
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (name) VALUES ($1)`, name); err != nil {
+			tx.Rollback(ctx) //nolint:errcheck
+			return applied, fmt.Errorf("store: recording %s: %w", name, err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return applied, fmt.Errorf("store: committing %s: %w", name, err)
 		}
 		applied = append(applied, name)
 	}

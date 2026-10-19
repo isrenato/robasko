@@ -250,3 +250,7 @@ func (s *Store) StaleFingerprints(ctx context.Context) (int, error) {
 	).Scan(&n)
 	return n, err
 }
+
+// Pool exposes the connection pool for packages that own their own
+// queries, such as the tool registry.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }

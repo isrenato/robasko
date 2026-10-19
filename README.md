@@ -281,18 +281,14 @@ this repository does not block anyone else's work.
 ## Development
 
 ```sh
-make help      # every target, split by what it needs
-make test      # Go only, offline
-make up        # Postgres 16 in Docker, waits until it is ready
+make help      # every target, one line each
+make test      # on the host: no network, no database
+make up        # Postgres 16 and agentd in Docker, schema applied
 ```
 
-The Go targets (`test`, `vet`, `fmt`, `check`, `hooks`) need a Go toolchain
-and the module cache. The tests themselves make no network calls — recorded
-fixtures stand in for the model — but a clean clone resolves dependencies
-once through `go mod download`.
-
-The Docker targets need a daemon. `up`, `down`, `logs`, `psql` and `run`
-drive the stack.
+Every target is listed by `make help`, each saying what it needs where
+that is not obvious. `make test` runs on the host against a local Go
+toolchain, makes no network calls and needs no database.
 
 The toolchain is also available as a service, so the repository can be built
 and tested with no local Go at all:

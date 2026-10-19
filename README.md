@@ -261,9 +261,9 @@ make test      # Go only, offline
 make up        # Postgres 16 in Docker, waits until it is ready
 ```
 
-The Go targets (`test`, `vet`, `fmt`, `check`, `hooks`) need nothing
-but a Go toolchain and never touch the network — the module has no
-dependencies, so the tests run on a clean clone and offline.
+The Go targets (`test`, `vet`, `fmt`, `check`, `hooks`) need nothing but a
+Go toolchain and never touch the network: dependencies are vendored into the
+repository, so the tests run on a clean clone and offline.
 
 The Docker targets need a daemon. `up`, `down`, `logs`, `psql` and `run`
 drive the stack.
@@ -294,9 +294,20 @@ docker compose down -v    # stop and destroy the database
 | Data boundary, data root, scrubber, pre-commit scan | built, tested |
 | Docker: Postgres 16, service image, Go toolchain service | built |
 | `agentd` with `-role`, `/healthz`, `/readyz`, graceful shutdown | built, tested |
+| Source configuration from numbered environment slots | built, tested |
+| One source adapter, `cmd/fetch` | built, tested |
+| Inventory loading and the coverage table | built, tested |
+| Scoring: must/nice split, caps, gaps | built, tested |
+| Requirement extraction | **stand-in only** — matches inventory aliases, no model |
 | Tool registry, runtime, nesting limits | specified, not built |
 | Queue, step state machine, handover between roles | specified, not built |
 | Demand aggregation, letters with the fact lock | specified, not built |
+
+Requirement extraction is the one entry above that is not what the design
+asks for. `internal/requirements/keyword` matches inventory aliases against
+the advertisement so the pipeline can run without an API key, and it can
+only find skills the inventory already names. A demand it cannot name never
+lowers the score, so scores produced this way read high.
 
 ```sh
 make up

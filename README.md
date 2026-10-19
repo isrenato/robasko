@@ -130,7 +130,20 @@ A letter is drafted only when the score clears the threshold and there are no
 must-gaps. Every claim it makes must carry a source — an inventory id or a
 line from the profile — and those ids are recorded in `letters.facts_used`.
 
-A sentence with no source fails validation and the draft is rejected.
+The lock has two layers. The reply schema enumerates the ids that exist,
+so an invented id cannot be returned at all; then every sentence is
+checked to carry at least one, so a sentence that cites nothing cannot
+pass by being plausible. A rejection quotes the offending sentence,
+because a draft that fails has to be fixable.
+
+Neither layer catches the third failure — a real id attached to a claim
+stronger than the evidence behind it — and nothing mechanical can. That is
+what the `claims` section of `style.yaml` is for, and why a draft stays a
+draft until a human approves it.
+
+Two things the letter never sees: an inventory entry with no evidence,
+which supports no claim, and a requirement the candidate does not meet,
+so there is nothing to apologise for.
 
 This is the rule that matters most: an invented fact is not caught by the
 reader, it is caught in the interview.
@@ -170,10 +183,17 @@ What lives there:
 | `profile.yaml` | citable facts a letter may claim | `profile.example.yaml` |
 | `style.yaml` | how a letter is written | `style.example.yaml` |
 | `protected-literals.txt` | what the pre-commit scan refuses to let through | — |
-| `letters/` | generated drafts and their PDFs | — |
 
 The committed examples carry invented contents and are there to show the
 format. Nothing reads them at runtime.
+
+Generated letters are the exception: they are written to `letters/` inside
+the working tree, where the default-deny rules keep them untracked. That
+is weaker than living outside the tree, so the guarantee is checked rather
+than assumed — `paths.Letters` asks git whether a file written there would
+be ignored and refuses to return the directory if it would not. An
+allowlist entry added later turns into a refusal to write instead of a
+committed biography.
 
 `env.lock` is the exception: it holds source hosts, credentials and
 `DATABASE_URL`, and it sits in the working tree where the default-deny
@@ -323,22 +343,30 @@ docker compose down -v    # stop and destroy the database
 | Inventory loading and the coverage table | built, tested |
 | Scoring: must/nice split, caps, gaps | built, tested |
 | Extraction and mapping onto inventory ids | built, tested offline; **never run against the live API** |
-| `cmd/score`: advertisement to score, stored with its requirement table | built |
+| `cmd/score`: advertisement to score, stored with its requirement table | built, tested |
+| Profile: citable facts, staleness by year | built, tested |
+| Letter drafting: eligibility, prompt, fact lock | built, tested offline |
+| Letter output: `letters` table, `.txt`, PDF renderer | not built |
 | Tool registry: schemas, versions, scopes | built, tested |
 | Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
 | Toolchain drift guard | built, tested |
 | Queue, step state machine, handover between roles | specified, not built |
-| Demand aggregation, letters with the fact lock | specified, not built |
+| Demand aggregation and the learning report | specified, not built |
 
 The pipeline is connected end to end: `cmd/score` reads a stored
 advertisement, has the model name the requirements, maps them onto
 inventory ids and computes the number, then stores the requirement table
 beside it so the score stays explainable.
 
-Neither model call has ever answered. Their tests replay recorded
-exchanges, and the live path got as far as a billing error — so the key
-and the workspace header work, and the request bodies are not yet proven.
-Until one runs, treat `cmd/score` as untested against reality.
+No model call has ever answered. Their tests replay recorded exchanges,
+and the live path got as far as a billing error — so the key and the
+workspace header work, and the request bodies are not yet proven. Until
+one runs, treat `cmd/score` as untested against reality.
+
+Letter drafting is in the same position, one step further back: the
+eligibility rules, the prompt and the fact lock are written and tested,
+but nothing yet writes a `.txt`, renders a PDF or records a row, and no
+vacancy has a score to clear the threshold with.
 
 An alias-matching stand-in existed for a while and was removed. It read
 "German language is NOT necessarily required" as a satisfied demand and a

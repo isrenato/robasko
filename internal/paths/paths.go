@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -155,16 +156,73 @@ const (
 	LogsDir    = "logs"
 )
 
-// Letters returns the directory generated cover letters are written to,
-// creating it with owner-only permissions.
+// Letters returns the directory generated cover letters are written to:
+// `letters/` inside the working tree.
 //
-// A letter is a biography: a name, an address, an employment history and
-// the employer it is addressed to. It must never be written inside the
-// repository, which is published. Routing every write through here means
-// the guarantee is a property of the code rather than a rule someone has
-// to remember, and it inherits DataRoot's refusal to resolve anywhere
-// inside the working tree.
-func Letters(repoRoot string) (string, error) { return Subdir(repoRoot, LettersDir) }
+// Letters held the strongest form of this guarantee for a while - written
+// beneath the data root, outside the tree, where git could not see them at
+// all. Keeping them in the project is more convenient and gives that up,
+// so the guarantee is re-established where they now live: this refuses to
+// return the directory unless git actually ignores it.
+//
+// That check is not ceremony. A letter is a biography - a name, an
+// address, an employment history and the employer it is addressed to - and
+// the repository is published. The default-deny ignore rules cover
+// `letters/` today; an allowlist entry added later would quietly undo
+// that, and this turns the quiet undoing into a refusal to write.
+func Letters(repoRoot string) (string, error) {
+	dir := filepath.Join(repoRoot, LettersDir)
+
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("creating %s: %w", dir, err)
+	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return "", fmt.Errorf("tightening %s: %w", dir, err)
+	}
+
+	// A file inside the directory is the question, not the directory
+	// itself. The default-deny idiom un-ignores directories with `!*/` so
+	// that git descends into them, so `letters/` is reported as tracked
+	// while everything in it is ignored. Asking about the directory gets
+	// the wrong answer in the safe direction, which is still wrong.
+	probe := filepath.Join(dir, "cover-letter.txt")
+	ignored, err := gitIgnores(repoRoot, probe)
+	if err != nil {
+		return "", err
+	}
+	if !ignored {
+		return "", fmt.Errorf("%w: %s", ErrLettersNotIgnored, probe)
+	}
+	return dir, nil
+}
+
+// ErrLettersNotIgnored reports a letters directory git would track.
+var ErrLettersNotIgnored = errors.New("the letters directory is not ignored by git; a draft written there could be committed")
+
+// gitIgnores asks git whether it would ignore a path. A repository git
+// does not know about cannot commit anything either, so that counts as
+// ignored rather than as an error.
+func gitIgnores(repoRoot, path string) (bool, error) {
+	cmd := exec.Command("git", "-C", repoRoot, "check-ignore", "-q", "--", path)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		switch exit.ExitCode() {
+		case 1:
+			return false, nil // git tracks it
+		case 128:
+			return true, nil // not a repository
+		}
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return true, nil // no git installed, nothing to commit with
+	}
+	return false, fmt.Errorf("asking git about %s: %w", path, err)
+}
 
 // Subdir returns a directory beneath the private data root, creating it
 // and the root with owner-only permissions.

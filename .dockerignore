@@ -19,6 +19,7 @@ data/
 *.log
 inventory.yaml
 profile.yaml
+style.yaml
 
 # Not needed to build.
 openspec/

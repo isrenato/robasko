@@ -170,10 +170,17 @@ What lives there:
 | `profile.yaml` | citable facts a letter may claim | `profile.example.yaml` |
 | `style.yaml` | how a letter is written | `style.example.yaml` |
 | `protected-literals.txt` | what the pre-commit scan refuses to let through | — |
-| `letters/` | generated drafts and their PDFs | — |
 
 The committed examples carry invented contents and are there to show the
 format. Nothing reads them at runtime.
+
+Generated letters are the exception: they are written to `letters/` inside
+the working tree, where the default-deny rules keep them untracked. That
+is weaker than living outside the tree, so the guarantee is checked rather
+than assumed — `paths.Letters` asks git whether a file written there would
+be ignored and refuses to return the directory if it would not. An
+allowlist entry added later turns into a refusal to write instead of a
+committed biography.
 
 `env.lock` is the exception: it holds source hosts, credentials and
 `DATABASE_URL`, and it sits in the working tree where the default-deny

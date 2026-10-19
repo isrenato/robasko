@@ -3,6 +3,7 @@ package paths
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -185,24 +186,22 @@ func TestReportsMissingHome(t *testing.T) {
 	}
 }
 
-// A generated letter carries a name, an address and an employment history.
-// It must land outside the published tree no matter how the process was
-// started.
-func TestLettersDirectoryIsOutsideTheRepository(t *testing.T) {
-	clearEnv(t)
-	root := t.TempDir()
-	repo := t.TempDir()
-	t.Setenv("ROBASKO_DATA_DIR", root)
+// A generated letter carries a name, an address and an employment
+// history, and the repository is published. A file written there must be
+// one git ignores, and that is checked rather than assumed.
+//
+// The check asks about a file, not the directory. The default-deny idiom
+// un-ignores directories with `!*/` so git descends into them, so the
+// directory reads as tracked while its contents are ignored.
+func TestLettersDirectoryMustBeIgnoredByGit(t *testing.T) {
+	repo := newRepo(t)
 
 	dir, err := Letters(repo)
 	if err != nil {
 		t.Fatalf("Letters: %v", err)
 	}
-	if !strings.HasPrefix(dir, filepath.Clean(root)) {
-		t.Errorf("letters land at %q, outside the data root %q", dir, root)
-	}
-	if inside, _ := isInside(dir, repo); inside {
-		t.Errorf("letters land inside the repository: %q", dir)
+	if filepath.Dir(dir) != repo {
+		t.Errorf("letters land at %q, outside the repository %q", dir, repo)
 	}
 
 	info, err := os.Stat(dir)
@@ -214,16 +213,42 @@ func TestLettersDirectoryIsOutsideTheRepository(t *testing.T) {
 	}
 }
 
-// If the data root is misconfigured into the working tree, writing a letter
-// must fail rather than quietly place one where git can see it.
-func TestLettersRefuseARootInsideTheRepository(t *testing.T) {
-	clearEnv(t)
-	repo := t.TempDir()
-	t.Setenv("ROBASKO_DATA_DIR", filepath.Join(repo, "data"))
-
-	if _, err := Letters(repo); !errors.Is(err, ErrRootInsideRepo) {
-		t.Errorf("got %v, want ErrRootInsideRepo", err)
+// The protection this replaces was structural: letters outside the tree
+// could not be committed at all. Here it is a check, so it has to fail
+// when the ignore rules stop covering the directory - which is exactly
+// what an allowlist entry added later would do.
+func TestLettersRefuseADirectoryGitWouldTrack(t *testing.T) {
+	repo := newRepo(t)
+	if err := os.WriteFile(filepath.Join(repo, ".gitignore"),
+		[]byte("*\n!*/\n!/letters/**\n"), 0o600); err != nil {
+		t.Fatal(err)
 	}
+
+	_, err := Letters(repo)
+	if !errors.Is(err, ErrLettersNotIgnored) {
+		t.Errorf("got %v, want ErrLettersNotIgnored", err)
+	}
+}
+
+// A directory git has no opinion about cannot be committed either.
+func TestLettersWorkOutsideARepository(t *testing.T) {
+	if _, err := Letters(t.TempDir()); err != nil {
+		t.Errorf("Letters outside a repository: %v", err)
+	}
+}
+
+// newRepo returns a git repository whose ignore rules are default-deny,
+// as the real one's are.
+func newRepo(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "-C", dir, "init", "-q").CombinedOutput(); err != nil {
+		t.Skipf("git unavailable: %v: %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*\n!*/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir
 }
 
 func TestSubdirRejectsNamesThatEscapeTheRoot(t *testing.T) {

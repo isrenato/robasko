@@ -15,16 +15,27 @@ import (
 	"strings"
 
 	"github.com/isrenato/robasko/internal/inventory"
+	"github.com/isrenato/robasko/internal/reference"
 	"github.com/isrenato/robasko/internal/scoring"
 )
 
-// softeners mark a line as a preference rather than a demand. German
-// advertisements are fairly consistent about these.
-var softeners = []string{
-	"idealerweise", "von vorteil", "wünschenswert", "wuenschenswert",
-	"von großem vorteil", "pluspunkt", "gerne auch", "bonus",
-	"nice to have", "a plus", "is a plus", "optional", "desirable",
-	"preferred", "would be great",
+// Extractor matches requirements using a loaded vocabulary.
+type Extractor struct{ terms *reference.Terms }
+
+// New returns an extractor over the given vocabulary. A nil vocabulary
+// falls back to the one compiled in.
+func New(terms *reference.Terms) *Extractor {
+	if terms == nil {
+		terms = reference.Default()
+	}
+	return &Extractor{terms: terms}
+}
+
+// Extract returns one requirement per inventory entry mentioned in text,
+// using the vocabulary compiled in. Prefer New when a database-loaded
+// vocabulary is available.
+func Extract(text string, inv *inventory.Inventory) []scoring.Requirement {
+	return New(nil).Extract(text, inv)
 }
 
 // Extract returns one requirement per inventory entry mentioned in text.
@@ -32,7 +43,7 @@ var softeners = []string{
 // The line carrying the mention becomes the requirement's verbatim text,
 // which is what makes a score explainable: every point points back at a
 // sentence someone actually wrote.
-func Extract(text string, inv *inventory.Inventory) []scoring.Requirement {
+func (e *Extractor) Extract(text string, inv *inventory.Inventory) []scoring.Requirement {
 	lines := splitLines(text)
 
 	type hit struct {
@@ -44,7 +55,7 @@ func Extract(text string, inv *inventory.Inventory) []scoring.Requirement {
 	for i, line := range lines {
 		lower := strings.ToLower(line)
 		kind := scoring.Must
-		if containsAny(lower, softeners) {
+		if containsAny(lower, e.terms.List(reference.Softener)) {
 			kind = scoring.Nice
 		}
 

@@ -1,0 +1,67 @@
+# EXAMPLE ARTIFACT - invented contents.
+#
+# Published to show the fact-atom format. The real profile lives under the
+# private data root and is never committed.
+#
+# Every claim a generated cover letter makes must cite either an inventory id
+# or one of these fact ids, and the cited ids are stored in letters.facts_used.
+# That is only checkable if facts are addressable, so this file is a list of
+# atoms with stable ids rather than prose. An id here is permanent: letters
+# already written cite it.
+#
+# fields:
+#   id        stable, dotted, never reused for different content
+#   kind      employment | education | achievement | personal | availability
+#   text      the claim, in the narrowest form that is true
+#   verbatim  true when a letter may quote the text as written
+#   until     optional; the year after which the fact stops being assertable
+
+- id: fact.nordwind.role
+  kind: employment
+  text: "Senior Backend Engineer at Nordwind Logistik GmbH since 2021"
+  verbatim: true
+
+- id: fact.nordwind.tracking-rewrite
+  kind: achievement
+  text: "Rebuilt a shipment tracking service in Go, replacing a nightly batch
+    with an event queue and reducing delivery status latency from hours to
+    seconds"
+  verbatim: true
+
+- id: fact.nordwind.team-lead
+  kind: employment
+  text: "Led a two-person data tooling team for eighteen months in a review
+    and planning capacity, without writing the code"
+  verbatim: false
+
+- id: fact.kastanienhof.migration
+  kind: achievement
+  text: "Led a MySQL 5.7 to PostgreSQL 13 migration without downtime"
+  verbatim: true
+
+- id: fact.kastanienhof.mentoring
+  kind: achievement
+  text: "Mentored two junior developers through their first year"
+  verbatim: true
+
+- id: fact.education.degree
+  kind: education
+  text: "B.Sc. Informatik, Hochschule Karlsruhe, 2014"
+  verbatim: true
+
+- id: fact.tenure.total
+  kind: employment
+  text: "Eleven years of professional backend development"
+  verbatim: false
+  until: 2027
+
+- id: fact.location.base
+  kind: personal
+  text: "Based in the Freiburg area"
+  verbatim: true
+
+- id: fact.availability.notice
+  kind: availability
+  text: "Available at three months' notice"
+  verbatim: true
+  until: 2027

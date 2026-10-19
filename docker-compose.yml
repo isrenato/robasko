@@ -1,0 +1,90 @@
+name: robasko
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-robasko}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-robasko}
+      POSTGRES_DB: ${POSTGRES_DB:-robasko}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # depends_on only orders startup; it does not wait. Dependants below use
+    # condition: service_healthy so they start against a database that is
+    # actually accepting connections.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-robasko} -d ${POSTGRES_DB:-robasko}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: unless-stopped
+
+  agentd:
+    build:
+      context: .
+    command: ["-role=scout"]
+    ports:
+      - "${AGENTD_PORT:-8080}:8080"
+    # The runtime image has no shell, so the probe re-executes the binary.
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/agentd", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-robasko}:${POSTGRES_PASSWORD:-robasko}@db:5432/${POSTGRES_DB:-robasko}?sslmode=disable
+      ROBASKO_DATA_DIR: /data
+      # Passed through from .env; no defaults, so a missing one is visible
+      # rather than quietly substituted.
+      SOURCE_1_NAME: ${SOURCE_1_NAME:-}
+      SOURCE_1_BASE_URL: ${SOURCE_1_BASE_URL:-}
+      SOURCE_1_API_KEY: ${SOURCE_1_API_KEY:-}
+      SOURCE_1_API_ID: ${SOURCE_1_API_ID:-}
+      SOURCE_2_NAME: ${SOURCE_2_NAME:-}
+      SOURCE_2_BASE_URL: ${SOURCE_2_BASE_URL:-}
+      SOURCE_2_API_KEY: ${SOURCE_2_API_KEY:-}
+      SOURCE_2_API_ID: ${SOURCE_2_API_ID:-}
+      SOURCE_3_NAME: ${SOURCE_3_NAME:-}
+      SOURCE_3_BASE_URL: ${SOURCE_3_BASE_URL:-}
+      SOURCE_3_API_KEY: ${SOURCE_3_API_KEY:-}
+      SOURCE_3_API_ID: ${SOURCE_3_API_ID:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # Bind-mounted, not copied: the data root holds personal data.
+      - ${ROBASKO_DATA_DIR:-${HOME}/.local/share/robasko}:/data
+    restart: unless-stopped
+
+  # The Go toolchain as a service, so the repository can be built and tested
+  # with no local Go install. The two cache volumes are what make it usable:
+  # without them every run recompiles the standard library.
+  #
+  #   docker compose run --rm go test ./...
+  #
+  go:
+    profiles: ["dev"]
+    image: golang:1.23-alpine
+    working_dir: /src
+    entrypoint: ["go"]
+    environment:
+      GOFLAGS: -buildvcs=false
+    volumes:
+      - .:/src
+      - go-build:/root/.cache/go-build
+      - go-mod:/go/pkg/mod
+
+volumes:
+  db-data:
+  go-build:
+  go-mod:

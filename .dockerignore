@@ -1,0 +1,29 @@
+# Build context is uploaded to the daemon and anything in it can end up in a
+# layer. Keep personal data, secrets and local state out of it.
+
+.git
+.gitignore
+.githooks
+.claude
+.DS_Store
+.idea
+.vscode
+
+# Private tier. None of this belongs in an image.
+.env
+.env.*
+SPEC.md
+cv/
+letters/
+data/
+*.log
+inventory.yaml
+profile.yaml
+
+# Not needed to build.
+openspec/
+README.md
+Makefile
+docker-compose.yml
+Dockerfile
+*_test.go

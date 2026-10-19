@@ -343,7 +343,7 @@ docker compose down -v    # stop and destroy the database
 | Inventory loading and the coverage table | built, tested |
 | Scoring: must/nice split, caps, gaps | built, tested |
 | Extraction and mapping onto inventory ids | built, tested offline; **never run against the live API** |
-| `cmd/score`: advertisement to score, stored with its requirement table | built |
+| `cmd/score`: advertisement to score, stored with its requirement table | built, tested |
 | Profile: citable facts, staleness by year | built, tested |
 | Letter drafting: eligibility, prompt, fact lock | built, tested offline |
 | Letter output: `letters` table, `.txt`, PDF renderer | not built |
@@ -351,7 +351,7 @@ docker compose down -v    # stop and destroy the database
 | Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
 | Toolchain drift guard | built, tested |
 | Queue, step state machine, handover between roles | specified, not built |
-| Demand aggregation, letters with the fact lock | specified, not built |
+| Demand aggregation and the learning report | specified, not built |
 
 The pipeline is connected end to end: `cmd/score` reads a stored
 advertisement, has the model name the requirements, maps them onto

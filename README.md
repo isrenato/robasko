@@ -130,7 +130,20 @@ A letter is drafted only when the score clears the threshold and there are no
 must-gaps. Every claim it makes must carry a source — an inventory id or a
 line from the profile — and those ids are recorded in `letters.facts_used`.
 
-A sentence with no source fails validation and the draft is rejected.
+The lock has two layers. The reply schema enumerates the ids that exist,
+so an invented id cannot be returned at all; then every sentence is
+checked to carry at least one, so a sentence that cites nothing cannot
+pass by being plausible. A rejection quotes the offending sentence,
+because a draft that fails has to be fixable.
+
+Neither layer catches the third failure — a real id attached to a claim
+stronger than the evidence behind it — and nothing mechanical can. That is
+what the `claims` section of `style.yaml` is for, and why a draft stays a
+draft until a human approves it.
+
+Two things the letter never sees: an inventory entry with no evidence,
+which supports no claim, and a requirement the candidate does not meet,
+so there is nothing to apologise for.
 
 This is the rule that matters most: an invented fact is not caught by the
 reader, it is caught in the interview.
@@ -331,6 +344,9 @@ docker compose down -v    # stop and destroy the database
 | Scoring: must/nice split, caps, gaps | built, tested |
 | Extraction and mapping onto inventory ids | built, tested offline; **never run against the live API** |
 | `cmd/score`: advertisement to score, stored with its requirement table | built |
+| Profile: citable facts, staleness by year | built, tested |
+| Letter drafting: eligibility, prompt, fact lock | built, tested offline |
+| Letter output: `letters` table, `.txt`, PDF renderer | not built |
 | Tool registry: schemas, versions, scopes | built, tested |
 | Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
 | Toolchain drift guard | built, tested |
@@ -342,10 +358,15 @@ advertisement, has the model name the requirements, maps them onto
 inventory ids and computes the number, then stores the requirement table
 beside it so the score stays explainable.
 
-Neither model call has ever answered. Their tests replay recorded
-exchanges, and the live path got as far as a billing error — so the key
-and the workspace header work, and the request bodies are not yet proven.
-Until one runs, treat `cmd/score` as untested against reality.
+No model call has ever answered. Their tests replay recorded exchanges,
+and the live path got as far as a billing error — so the key and the
+workspace header work, and the request bodies are not yet proven. Until
+one runs, treat `cmd/score` as untested against reality.
+
+Letter drafting is in the same position, one step further back: the
+eligibility rules, the prompt and the fact lock are written and tested,
+but nothing yet writes a `.txt`, renders a PDF or records a row, and no
+vacancy has a score to clear the threshold with.
 
 An alias-matching stand-in existed for a while and was removed. It read
 "German language is NOT necessarily required" as a satisfied demand and a

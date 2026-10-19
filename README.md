@@ -296,24 +296,37 @@ docker compose down -v    # stop and destroy the database
 | `agentd` with `-role`, `/healthz`, `/readyz`, graceful shutdown | built, tested |
 | Source configuration from numbered environment slots | built, tested |
 | One source adapter, `cmd/fetch` | built, tested |
+| Storage: migrations, fingerprint dedup, company dedup | built, tested |
+| Matching vocabulary in `reference_terms` | built, tested |
 | Inventory loading and the coverage table | built, tested |
-| Scoring: must/nice split, caps, gaps | built, tested |
-| Requirement extraction | **stand-in only** — matches inventory aliases, no model |
+| Scoring: must/nice split, caps, gaps | built, tested, **not yet wired** |
+| Requirement extraction | not built |
 | Tool registry, runtime, nesting limits | specified, not built |
 | Queue, step state machine, handover between roles | specified, not built |
 | Demand aggregation, letters with the fact lock | specified, not built |
 
-Requirement extraction is the one entry above that is not what the design
-asks for. `internal/requirements/keyword` matches inventory aliases against
-the advertisement so the pipeline can run without an API key, and it can
-only find skills the inventory already names. A demand it cannot name never
-lowers the score, so scores produced this way read high.
+Scoring is complete and tested but nothing calls it, because requirement
+extraction is missing: the engine takes a mapped requirement list, and
+producing that list from an advertisement is a model's job (SPEC.md §11).
+
+An alias-matching stand-in existed for a while and was removed. It read
+"German language is NOT necessarily required" as a satisfied demand and a
+board's own footer as a requirement, and it could not see a demand the
+inventory had no word for, so it only ever scored high. A number that is
+wrong in one direction is worse than no number: it would have been quoted.
 
 ```sh
 make up
 curl localhost:8080/healthz   # ok
 curl localhost:8080/readyz    # ready, or 503 when the database is down
+
+go run ./cmd/fetch -migrate              # apply migrations
+go run ./cmd/fetch -what=backend -save   # fetch and store, skipping duplicates
 ```
+
+Generated letters, caches and logs are written beneath the data root
+through `internal/paths`, never into the working tree — the repository is
+published, and a letter is a biography.
 
 Liveness does not touch the database on purpose: a database outage should
 not make the orchestrator restart processes that are working.

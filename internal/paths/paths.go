@@ -147,3 +147,52 @@ func realPath(p string) (string, error) {
 		current = parent
 	}
 }
+
+// Subdirectory names within the data root.
+const (
+	LettersDir = "letters"
+	CacheDir   = "cache"
+	LogsDir    = "logs"
+)
+
+// Letters returns the directory generated cover letters are written to,
+// creating it with owner-only permissions.
+//
+// A letter is a biography: a name, an address, an employment history and
+// the employer it is addressed to. It must never be written inside the
+// repository, which is published. Routing every write through here means
+// the guarantee is a property of the code rather than a rule someone has
+// to remember, and it inherits DataRoot's refusal to resolve anywhere
+// inside the working tree.
+func Letters(repoRoot string) (string, error) { return Subdir(repoRoot, LettersDir) }
+
+// Subdir returns a directory beneath the private data root, creating it
+// and the root with owner-only permissions.
+func Subdir(repoRoot, name string) (string, error) {
+	if name == "" || name == "." || name == ".." ||
+		filepath.IsAbs(name) || strings.ContainsRune(name, os.PathSeparator) {
+		return "", fmt.Errorf("%w: %q", ErrBadSubdir, name)
+	}
+
+	root, err := EnsureDataRoot(repoRoot)
+	if err != nil {
+		return "", err
+	}
+
+	dir := filepath.Join(root, name)
+	// Checked after joining as well as before: a name can be a single path
+	// element and still leave the root, which is how ".." gets through a
+	// check that only looks at the spelling.
+	if parent, err := isInside(dir, root); err != nil {
+		return "", err
+	} else if !parent {
+		return "", fmt.Errorf("%w: %q escapes the data root", ErrBadSubdir, name)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("creating %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+// ErrBadSubdir reports a subdirectory name that could escape the data root.
+var ErrBadSubdir = errors.New("subdirectory must be a single path element")

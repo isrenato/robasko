@@ -21,6 +21,8 @@ inventory.yaml
 profile.yaml
 style.yaml
 
+vendor/
+
 # Not needed to build.
 openspec/
 README.md

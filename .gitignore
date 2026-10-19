@@ -36,10 +36,6 @@
 !/SPEC.md
 !/openspec/**
 
-# Vendored dependencies: committed so a clean clone builds and tests
-# without network, as SPEC.md 20 requires.
-!/vendor/**
-
 # --- example artifacts: invented contents, published to show the formats ---
 !/cv/example.md
 !/inventory.example.yaml

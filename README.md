@@ -11,8 +11,9 @@ runtime is not.
 
 ## How it works
 
-Specified in full; only the data boundary below is built so far. See
-**Status** at the end for what actually runs today.
+Specified in full. Some of it runs: the registry, the scoring engine and
+requirement extraction are written, the runtime and the queue are not. See
+**Status** at the end for which is which.
 
 ### Tool registry
 
@@ -161,6 +162,30 @@ A root that resolves to a location inside the repository is rejected at
 startup, and the error names the offending path. A mistyped override fails
 loudly, before any personal data lands where git can reach it.
 
+What lives there:
+
+| File | What it is | Example in the repo |
+|---|---|---|
+| `inventory.yaml` | skills with levels and evidence; every score is computed against it | `inventory.example.yaml` |
+| `profile.yaml` | citable facts a letter may claim | `profile.example.yaml` |
+| `style.yaml` | how a letter is written | `style.example.yaml` |
+| `protected-literals.txt` | what the pre-commit scan refuses to let through | — |
+| `letters/` | generated drafts and their PDFs | — |
+
+The committed examples carry invented contents and are there to show the
+format. Nothing reads them at runtime.
+
+`env.lock` is the exception: it holds source hosts, credentials and
+`DATABASE_URL`, and it sits in the working tree where the default-deny
+ignore rules keep it untracked. `.env.example` shows the variables.
+
+Symlinking the private files into the working tree is convenient and safe —
+the ignore rules cover the link as well as the target:
+
+```sh
+ln -s "$HOME/.local/share/robasko/inventory.yaml" inventory.yaml
+```
+
 ```sh
 # inspect the resolved root
 ROBASKO_DATA_DIR=/tmp/robasko-demo go test ./internal/paths/ -run TestDataRootUsesOverrideAsGiven -v
@@ -301,14 +326,20 @@ docker compose down -v    # stop and destroy the database
 | Matching vocabulary in `reference_terms` | built, tested |
 | Inventory loading and the coverage table | built, tested |
 | Scoring: must/nice split, caps, gaps | built, tested, **not yet wired** |
-| Requirement extraction | not built |
-| Tool registry, runtime, nesting limits | specified, not built |
+| Requirement extraction, model client, fixture replay | built, tested offline; **never run against the live API** |
+| Tool registry: schemas, versions, scopes | built, tested |
+| Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
+| Toolchain drift guard | built, tested |
 | Queue, step state machine, handover between roles | specified, not built |
 | Demand aggregation, letters with the fact lock | specified, not built |
 
-Scoring is complete and tested but nothing calls it, because requirement
-extraction is missing: the engine takes a mapped requirement list, and
-producing that list from an advertisement is a model's job (SPEC.md §11).
+Scoring is complete and tested but nothing calls it yet: the engine takes a
+mapped requirement list, extraction produces an unmapped one, and the step
+that maps a requirement onto inventory ids is not written.
+
+Extraction has never answered. Its tests replay recorded exchanges, and the
+live path got as far as a billing error — so the key and the workspace
+header work, and the request body is not yet proven.
 
 An alias-matching stand-in existed for a while and was removed. It read
 "German language is NOT necessarily required" as a satisfied demand and a

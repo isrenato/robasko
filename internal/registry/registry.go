@@ -54,6 +54,49 @@ type Tool struct {
 	in, out *jsonschema.Schema
 }
 
+// NewTool compiles a definition into a usable tool without storing it.
+//
+// Built-in tools that exist in code rather than in the table - call_tool
+// among them - need a compiled Tool to be validated against, and so do
+// tests that have no database. The policy and the metaschema are applied
+// exactly as Register applies them, so a tool built this way cannot be
+// looser than one that was stored.
+func NewTool(def Definition, version int) (*Tool, error) {
+	if strings.TrimSpace(def.Name) == "" {
+		return nil, fmt.Errorf("registry: empty tool name")
+	}
+	if err := CheckSchemaPolicy(def.InputSchema); err != nil {
+		return nil, fmt.Errorf("registry: %s input: %w", def.Name, err)
+	}
+	if err := CheckSchemaPolicy(def.OutputSchema); err != nil {
+		return nil, fmt.Errorf("registry: %s output: %w", def.Name, err)
+	}
+	if version <= 0 {
+		version = 1
+	}
+	if def.Timeout <= 0 {
+		def.Timeout = defaultTimeout
+	}
+	if def.RequiredScopes == nil {
+		def.RequiredScopes = []string{}
+	}
+
+	t := &Tool{
+		Name: def.Name, Version: version, Description: def.Description,
+		InputSchema: def.InputSchema, OutputSchema: def.OutputSchema,
+		RequiredScopes: def.RequiredScopes, Timeout: def.Timeout,
+	}
+
+	var err error
+	if t.in, err = compile(def.Name+"-input", def.InputSchema); err != nil {
+		return nil, err
+	}
+	if t.out, err = compile(def.Name+"-output", def.OutputSchema); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
 // Registry stores and resolves tools.
 type Registry struct {
 	pool *pgxpool.Pool

@@ -46,6 +46,20 @@ Four limits, all enforced in the runtime rather than asked for in a prompt:
 | Same tool twice in one call stack | — | `cycle_detected` |
 | Repeated idempotency key | — | returns the stored output |
 
+Two consequences worth knowing, both measured rather than assumed.
+
+A nesting costs two frames, not one: `call_tool` is executed like any
+other tool, so reaching a tool through it spends a level on the nesting
+and a level on the target. With a depth of 3 that fits two nested tools.
+The skill in SPEC.md §9 is not a chain but one parent calling several
+tools as siblings, each two frames down, which fits comfortably.
+
+Because of that, the depth check shadows the cycle check for anything
+longer than a self-call: `a → b → a` needs four frames and is refused at
+three before the stack is consulted. Cycle detection covers the direct
+case and stands by if the depth ever rises. A looping chain reports
+`depth_exceeded`, not `cycle_detected`.
+
 A prompt can be ignored; a runtime check cannot. Queue work uses `step_id` as
 the idempotency key, so a retried step replays its stored result instead of
 running the handler twice.
@@ -77,6 +91,17 @@ scope check refuses it.
 `analyst` claims it; at or above the threshold with no must-gap it queues
 `draft_letter`, otherwise it closes the task with the reason. `writer`
 produces the draft and closes the task.
+
+A role claims only its own step tools, so whichever process polls first
+does not take work meant for another. `agentd -role=analyst` runs that
+loop; `scout` serves health only, because it is driven by saved searches
+rather than by the queue.
+
+A refusal the runtime made on policy — a missing scope, an argument that
+does not validate, a budget spent — is not retried. It will refuse again
+identically, and the attempts only delay the task reaching a state
+someone can act on. A handler that failed for its own reasons, or timed
+out, gets the backoff.
 
 Steps are claimed with `FOR UPDATE SKIP LOCKED`, so two analysts racing for
 the same step cannot both win. A step moves `pending -> claimed -> done |
@@ -348,9 +373,11 @@ docker compose down -v    # stop and destroy the database
 | Letter drafting: eligibility, prompt, fact lock | built, tested offline |
 | Letter output: `letters` table, `.txt`, PDF renderer | not built |
 | Tool registry: schemas, versions, scopes | built, tested |
-| Runtime: nested calls, depth, budget, cycle and idempotency limits | specified, not built |
+| Runtime: nested calls, depth, budget, cycle and idempotency limits | built, tested |
 | Toolchain drift guard | built, tested |
-| Queue, step state machine, handover between roles | specified, not built |
+| Queue on `SKIP LOCKED`, retry with backoff, dead steps | built, tested |
+| Three agent roles wired to the queue, call log, trace tree | built, tested |
+| Domain tools registered for the roles to run | not built |
 | Demand aggregation and the learning report | specified, not built |
 
 The pipeline is connected end to end: `cmd/score` reads a stored

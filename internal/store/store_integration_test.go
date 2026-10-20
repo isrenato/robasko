@@ -68,13 +68,20 @@ func TestSaveDeduplicatesByFingerprint(t *testing.T) {
 	s := openTest(t)
 	ctx := context.Background()
 
-	unique := time.Now().UnixNano()
+	// Every identifying field is unique per run. A fixed source id passes
+	// once and then collides with its own earlier row forever, which is a
+	// test that only works on an empty database.
+	stamp := time.Now().Format("150405.000000000")
 	base := Vacancy{
-		Source: "board-a", SourceID: "a-1", Title: "Backend Engineer",
+		Source: "board-a", SourceID: "a-" + stamp,
+		Title:   "Backend Engineer " + stamp,
 		Company: "Testfirma Nordwind GmbH", City: "Teststadt",
 		Remote: "remote", Text: "We are looking for you with experience",
 	}
-	base.Title = base.Title + " " + time.Unix(0, unique).Format("150405.000000000")
+	t.Cleanup(func() {
+		s.pool.Exec(context.Background(),
+			`DELETE FROM vacancies WHERE source_id LIKE $1`, "%"+stamp)
+	})
 
 	first, err := s.Save(ctx, []Vacancy{base})
 	if err != nil {
@@ -92,7 +99,7 @@ func TestSaveDeduplicatesByFingerprint(t *testing.T) {
 	// Another board, another identifier, the company written without its
 	// legal form: still the same post.
 	crossBoard := base
-	crossBoard.Source, crossBoard.SourceID = "board-b", "b-9"
+	crossBoard.Source, crossBoard.SourceID = "board-b", "b-"+stamp
 	crossBoard.Company = "Testfirma Nordwind"
 	other, _ := s.Save(ctx, []Vacancy{crossBoard})
 	if other.New != 0 {

@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -415,4 +417,29 @@ type StoredVacancy struct {
 	Remote  string
 	Text    string
 	URL     string
+}
+
+// EnsureAgent registers a role and returns its id, so calls can be
+// attributed to it in the call log.
+//
+// The token hash is generated once and left alone afterwards. No endpoint
+// authenticates against it yet; the column exists because SPEC.md §5 has
+// it, and writing a random value now is better than a NULL that later
+// turns into a nullable column nobody tightens.
+func (s *Store) EnsureAgent(ctx context.Context, name string, scopes []string) (string, error) {
+	token := make([]byte, 32)
+	if _, err := rand.Read(token); err != nil {
+		return "", fmt.Errorf("store: generating an agent token: %w", err)
+	}
+
+	var id string
+	err := s.pool.QueryRow(ctx, `
+		INSERT INTO agents (name, scopes, token_hash)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (name) DO UPDATE SET scopes = EXCLUDED.scopes
+		RETURNING id`, name, scopes, hex.EncodeToString(token)).Scan(&id)
+	if err != nil {
+		return "", fmt.Errorf("store: registering agent %q: %w", name, err)
+	}
+	return id, nil
 }

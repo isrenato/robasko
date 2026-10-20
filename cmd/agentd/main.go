@@ -22,12 +22,18 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/isrenato/robasko/internal/orchestrator"
 	"github.com/isrenato/robasko/internal/paths"
+	"github.com/isrenato/robasko/internal/queue"
+	"github.com/isrenato/robasko/internal/registry"
+	"github.com/isrenato/robasko/internal/runtime"
 	"github.com/isrenato/robasko/internal/store"
 )
 
-// roles are the agent roles from SPEC.md §8.
-var roles = map[string]bool{"scout": true, "analyst": true, "writer": true}
+// pollInterval is how long a role waits when the queue is empty. Short
+// enough that a handover is picked up promptly, long enough that three
+// idle processes are not hammering one table.
+const pollInterval = 2 * time.Second
 
 // pinger is the part of the database pool the readiness check needs. Taking
 // an interface rather than *pgxpool.Pool keeps the handler testable without
@@ -61,7 +67,8 @@ func main() {
 }
 
 func run(role, addr string) error {
-	if !roles[role] {
+	roleDef, err := orchestrator.Lookup(role)
+	if err != nil {
 		return fmt.Errorf("unknown role %q: expected scout, analyst or writer", role)
 	}
 
@@ -103,6 +110,26 @@ func run(role, addr string) error {
 		}
 
 		db = st.Pool()
+
+		// A role that claims steps works the queue for as long as the
+		// process lives. scout has no steps to claim - it is driven by
+		// saved searches - so it serves health only.
+		if len(roleDef.Handles) > 0 {
+			agentID, err := st.EnsureAgent(ctx, roleDef.Name, roleDef.Scopes)
+			if err != nil {
+				return err
+			}
+
+			rt := runtime.New(registry.New(st.Pool()), st.Calls())
+			worker := orchestrator.New(roleDef, agentID, queue.NewPostgres(st.Pool()), rt, log)
+
+			go func() {
+				if err := worker.Run(ctx, pollInterval); err != nil &&
+					!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) {
+					log.Error("the worker stopped", "error", err)
+				}
+			}()
+		}
 	} else {
 		log.Warn("DATABASE_URL is not set; readiness will report unavailable")
 	}

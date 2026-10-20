@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,14 +210,23 @@ func TestListForIsScopedAndSorted(t *testing.T) {
 		}
 	}
 
+	t.Cleanup(func() {
+		r.pool.Exec(context.Background(),
+			`DELETE FROM tools WHERE name LIKE $1`, fmt.Sprintf("test.list.%d.%%", stamp))
+	})
+
 	tools, err := r.ListFor(ctx, []string{"vacancies:read"})
 	if err != nil {
 		t.Fatalf("ListFor: %v", err)
 	}
 
+	// Scoped to this run's stamp: the prefix alone also matches the rows
+	// every previous run left behind, which turns a passing test into one
+	// that only works on an empty database.
+	prefix := fmt.Sprintf("test.list.%d.", stamp)
 	var mine []string
 	for _, tool := range tools {
-		if len(tool.Name) > 10 && tool.Name[:10] == "test.list." {
+		if strings.HasPrefix(tool.Name, prefix) {
 			mine = append(mine, tool.Name)
 		}
 	}

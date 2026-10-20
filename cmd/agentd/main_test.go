@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+
 	"errors"
+	"github.com/isrenato/robasko/internal/orchestrator"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -81,8 +83,24 @@ func TestUnknownRoleIsRejected(t *testing.T) {
 
 func TestEveryDocumentedRoleIsAccepted(t *testing.T) {
 	for _, role := range []string{"scout", "analyst", "writer"} {
-		if !roles[role] {
-			t.Errorf("role %q from SPEC.md 8 is not accepted", role)
+		if _, err := orchestrator.Lookup(role); err != nil {
+			t.Errorf("role %q from SPEC.md 8 is not accepted: %v", role, err)
+		}
+	}
+}
+
+// Only analyst and writer take work off the queue; scout is driven by
+// saved searches and has no steps to claim.
+func TestOnlyQueueRolesClaimSteps(t *testing.T) {
+	for role, wantHandles := range map[string]bool{
+		"scout": false, "analyst": true, "writer": true,
+	} {
+		r, err := orchestrator.Lookup(role)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(r.Handles) > 0; got != wantHandles {
+			t.Errorf("%s handles %v", role, r.Handles)
 		}
 	}
 }

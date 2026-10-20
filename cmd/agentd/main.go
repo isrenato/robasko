@@ -5,8 +5,15 @@
 // cannot write letters. The roles differ only in configuration; this is one
 // binary started three ways.
 //
-// Only the health endpoints are implemented so far. The registry, the
-// runtime and the queue are specified and not yet built.
+// A role that claims steps works the queue for as long as the process
+// lives: claim, run the tool through the runtime, record the outcome.
+// scout has no steps to claim - saved searches drive it - so it serves
+// health only.
+//
+// What is not here yet is the domain tools themselves. The registry, the
+// runtime and the queue are built, but nothing registers sources.fetch,
+// score.compute or letter.draft, so a queued step resolves to a tool that
+// does not exist.
 package main
 
 import (

@@ -32,9 +32,6 @@
 !/scripts/**
 !/.githooks/**
 
-# --- planning artifacts ---
-!/openspec/**
-
 # --- example artifacts: invented contents, published to show the formats ---
 !/cv/example.md
 !/inventory.example.yaml

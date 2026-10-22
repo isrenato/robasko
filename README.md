@@ -6,14 +6,16 @@ limits, and agents that hand work over through a queue. It finds vacancies
 through public job APIs, scores them against a structured skills inventory,
 and drafts a cover letter when the score clears a threshold.
 
-The project is early. The data boundary described below is in place; the
-runtime is not.
+The project is early. The registry, the runtime, the queue and the three
+roles are built, and a writer can claim a queued step and produce a letter as
+a `.txt`, a one-page PDF and a row in `letters`. The analyst's `score_vacancy`
+is not built, so nothing queues that work unattended yet; `cmd/letter` runs
+the same tool by hand in the meantime.
 
 ## How it works
 
-Specified in full. Some of it runs: the registry, the scoring engine and
-requirement extraction are written, the runtime and the queue are not. See
-**Status** at the end for which is which.
+Not all of it runs yet. **Status** at the end says which parts do, and what
+each one has been tested against.
 
 ### Tool registry
 
@@ -51,7 +53,7 @@ Two consequences worth knowing, both measured rather than assumed.
 A nesting costs two frames, not one: `call_tool` is executed like any
 other tool, so reaching a tool through it spends a level on the nesting
 and a level on the target. With a depth of 3 that fits two nested tools.
-The skill in SPEC.md §9 is not a chain but one parent calling several
+The shape it is built for is not a chain but one parent calling several
 tools as siblings, each two frames down, which fits comfortably.
 
 Because of that, the depth check shadows the cycle check for anything
@@ -371,13 +373,16 @@ docker compose down -v    # stop and destroy the database
 | `cmd/score`: advertisement to score, stored with its requirement table | built, tested |
 | Profile: citable facts, staleness by year | built, tested |
 | Letter drafting: eligibility, prompt, fact lock | built, tested offline |
-| Letter output: `letters` table, `.txt`, PDF renderer | not built |
+| Style file: register, fixed lines, section weights | built, tested |
+| Letter output: `letters` table, `.txt`, one-page PDF | built, tested offline |
 | Tool registry: schemas, versions, scopes | built, tested |
 | Runtime: nested calls, depth, budget, cycle and idempotency limits | built, tested |
 | Toolchain drift guard | built, tested |
 | Queue on `SKIP LOCKED`, retry with backoff, dead steps | built, tested |
 | Three agent roles wired to the queue, call log, trace tree | built, tested |
-| Domain tools registered for the roles to run | not built |
+| `draft_letter` registered, handled and claimable from the queue | built, tested |
+| `cmd/letter`: a scored vacancy to a draft, by hand through the runtime | built |
+| `score_vacancy`, which queues the writer's work | not built |
 | Demand aggregation and the learning report | specified, not built |
 
 The pipeline is connected end to end: `cmd/score` reads a stored
@@ -390,10 +395,19 @@ and the live path got as far as a billing error — so the key and the
 workspace header work, and the request bodies are not yet proven. Until
 one runs, treat `cmd/score` as untested against reality.
 
-Letter drafting is in the same position, one step further back: the
-eligibility rules, the prompt and the fact lock are written and tested,
-but nothing yet writes a `.txt`, renders a PDF or records a row, and no
-vacancy has a score to clear the threshold with.
+Letter drafting is in the same position, and now reaches output. The
+eligibility rules, the prompt and the fact lock run through to a `.txt`,
+a PDF beside it and a row in `letters` holding the ids the draft cited.
+What it has no supply of is work: `score_vacancy` is not built, so no
+vacancy arrives with a score to clear the threshold. The path runs today
+through `cmd/letter`, against a vacancy scored by hand with `cmd/score`.
+
+The PDF is optional, on purpose. `scripts/build_letter.py` needs no
+third-party package, but the runtime image is distroless and has no
+python, so a draft without a PDF beside it is an ordinary state: the
+`.txt` is written and the row says `needs_human` with the reason. Exit
+code 2 means the letter did not fit one page, which is the signal to
+shorten the lowest-weighted paragraph and try again, at most twice.
 
 An alias-matching stand-in existed for a while and was removed. It read
 "German language is NOT necessarily required" as a satisfied demand and a
@@ -414,6 +428,7 @@ curl localhost:8080/readyz    # ready, or 503 when the database is down
 
 go run ./cmd/fetch -what=backend -save   # fetch and store, skipping duplicates
 go run ./cmd/score -limit=3              # read, map and score what is stored
+go run ./cmd/letter -vacancy=<id>        # draft a letter for a scored vacancy
 ```
 
 Generated letters, caches and logs are written beneath the data root

@@ -10,10 +10,12 @@
 // scout has no steps to claim - saved searches drive it - so it serves
 // health only.
 //
-// What is not here yet is the domain tools themselves. The registry, the
-// runtime and the queue are built, but nothing registers sources.fetch,
-// score.compute or letter.draft, so a queued step resolves to a tool that
-// does not exist.
+// Of the domain tools, draft_letter is built: a writer registers it,
+// attaches its handler and can work a queued step end to end. The
+// analyst's score_vacancy is not, so nothing yet queues the writer's work
+// and a claimed score_vacancy step fails with not_found. The startup log
+// says which of a role's step tools are missing rather than leaving that
+// to be discovered a step at a time.
 package main
 
 import (
@@ -26,6 +28,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"slices"
 	"syscall"
 	"time"
 
@@ -128,6 +131,21 @@ func run(role, addr string) error {
 			}
 
 			rt := runtime.New(registry.New(st.Pool()), st.Calls())
+
+			// Registered and handled before the worker starts. A role
+			// that claims a step for a tool it has not attached a handler
+			// to spends an attempt discovering that.
+			installed, err := domainTools(ctx, st, rt, roleDef, dataRoot, log)
+			if err != nil {
+				return fmt.Errorf("installing the domain tools: %w", err)
+			}
+			log.Info("tools installed", "tools", installed)
+			for _, name := range roleDef.Handles {
+				if !slices.Contains(installed, name) {
+					log.Warn("this role claims a step tool that is not built yet", "tool", name)
+				}
+			}
+
 			worker := orchestrator.New(roleDef, agentID, queue.NewPostgres(st.Pool()), rt, log)
 
 			go func() {

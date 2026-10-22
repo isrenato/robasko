@@ -242,3 +242,93 @@ func TestListForIsScopedAndSorted(t *testing.T) {
 		}
 	}
 }
+
+// Ensure exists so a process can register its tools at startup without
+// walking the version number up every time it restarts. Every one of
+// those versions would be a row a trace might pin.
+func TestEnsureDoesNotBumpAnUnchangedTool(t *testing.T) {
+	r := openTest(t)
+	ctx := context.Background()
+
+	def := Definition{
+		Name:           uniqueName(t),
+		Description:    "drafts a letter",
+		InputSchema:    schema(`"vacancy_id"`, `"vacancy_id":{"type":"string"}`),
+		OutputSchema:   schema(`"letter_id"`, `"letter_id":{"type":"string"}`),
+		RequiredScopes: []string{"letters:write"},
+		Timeout:        4 * time.Minute,
+	}
+
+	first, err := r.Ensure(ctx, def)
+	if err != nil {
+		t.Fatalf("first Ensure: %v", err)
+	}
+	if first.Version != 1 {
+		t.Fatalf("first registration got version %d, want 1", first.Version)
+	}
+
+	// A second registry over the same pool, because the first has the
+	// tool compiled in memory and would answer from there.
+	for i := 0; i < 3; i++ {
+		again, err := New(r.pool).Ensure(ctx, def)
+		if err != nil {
+			t.Fatalf("Ensure %d: %v", i+2, err)
+		}
+		if again.Version != 1 {
+			t.Fatalf("re-registering an unchanged tool produced version %d", again.Version)
+		}
+	}
+}
+
+// A tool that really did change still gets a new version, and the old one
+// stays callable because a task in flight pinned it.
+func TestEnsureBumpsAChangedTool(t *testing.T) {
+	r := openTest(t)
+	ctx := context.Background()
+	name := uniqueName(t)
+
+	base := Definition{
+		Name:           name,
+		Description:    "drafts a letter",
+		InputSchema:    schema(`"vacancy_id"`, `"vacancy_id":{"type":"string"}`),
+		OutputSchema:   schema(`"letter_id"`, `"letter_id":{"type":"string"}`),
+		RequiredScopes: []string{"letters:write"},
+		Timeout:        time.Minute,
+	}
+	if _, err := r.Ensure(ctx, base); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+
+	changes := map[string]func(*Definition){
+		"the description": func(d *Definition) { d.Description = "drafts a cover letter" },
+		"a scope":         func(d *Definition) { d.RequiredScopes = []string{"letters:write", "scores:read"} },
+		"the timeout":     func(d *Definition) { d.Timeout = 2 * time.Minute },
+		"the input schema": func(d *Definition) {
+			d.InputSchema = schema(`"vacancy_id"`, `"vacancy_id":{"type":"string"},"contact":{"type":"string"}`)
+		},
+	}
+
+	version := 1
+	for what, change := range changes {
+		def := base
+		change(&def)
+		got, err := New(r.pool).Ensure(ctx, def)
+		if err != nil {
+			t.Fatalf("Ensure after changing %s: %v", what, err)
+		}
+		version++
+		if got.Version != version {
+			t.Errorf("changing %s produced version %d, want %d", what, got.Version, version)
+		}
+		base = def
+	}
+
+	// Version 1 is still there to be resolved.
+	old, err := New(r.pool).Resolve(ctx, name, 1)
+	if err != nil {
+		t.Fatalf("resolving the first version: %v", err)
+	}
+	if old.Description != "drafts a letter" {
+		t.Errorf("version 1 changed under a task that pinned it: %q", old.Description)
+	}
+}

@@ -13,6 +13,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -163,6 +165,59 @@ func (r *Registry) Register(ctx context.Context, def Definition) (*Tool, error) 
 	}
 
 	return r.Resolve(ctx, def.Name, version)
+}
+
+// Ensure registers a tool only when it is not already stored as it stands.
+//
+// Register bumps the version every time it is called, which is right for a
+// tool that changed and wrong for a process that registers its tools at
+// startup: three roles restarting twice a day would walk the version
+// number up for tools nobody touched, and every one of those versions is
+// a row a trace might pin. Ensure compares the definition with the latest
+// stored one and registers only on a difference.
+func (r *Registry) Ensure(ctx context.Context, def Definition) (*Tool, error) {
+	current, err := r.Resolve(ctx, def.Name, 0)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	if current != nil && current.matches(def) {
+		return current, nil
+	}
+	return r.Register(ctx, def)
+}
+
+// matches reports whether a stored tool is the definition unchanged.
+//
+// The schemas are compared as values rather than as bytes: they went into
+// jsonb, which does not promise to give back the key order or the
+// whitespace they went in with, so a byte comparison would report a
+// difference on every startup.
+func (t *Tool) matches(def Definition) bool {
+	timeout := def.Timeout
+	if timeout <= 0 {
+		timeout = defaultTimeout
+	}
+	scopes := def.RequiredScopes
+	if scopes == nil {
+		scopes = []string{}
+	}
+
+	return t.Description == def.Description &&
+		t.Timeout == timeout &&
+		slices.Equal(t.RequiredScopes, scopes) &&
+		sameJSON(t.InputSchema, def.InputSchema) &&
+		sameJSON(t.OutputSchema, def.OutputSchema)
+}
+
+func sameJSON(a, b json.RawMessage) bool {
+	var x, y any
+	if err := json.Unmarshal(a, &x); err != nil {
+		return false
+	}
+	if err := json.Unmarshal(b, &y); err != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }
 
 // Resolve returns a tool. Version 0 means the latest.

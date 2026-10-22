@@ -299,3 +299,50 @@ func TestSystemPromptIsStableAcrossVacancies(t *testing.T) {
 		t.Error("the vacancy did not reach the user prompt")
 	}
 }
+
+// The fixed lines are rendered from the style file and written into the
+// draft, not asked of the model. A model that returns a near miss - a
+// comma dropped, a surname inflected - must not reach the reader, because
+// the greeting is the first thing read.
+func TestFixedLinesReplaceWhatTheModelReturned(t *testing.T) {
+	f := fake(t, goodDraft)
+	v := Vacancy{
+		Title: "Backend", Company: "Testfirma", Language: "de",
+		Salutation: "Guten Tag Kim Weber,",
+		Closing:    "Mit freundlichen Grüßen",
+	}
+
+	d, _, err := Write(context.Background(), f, v, passing(), nil, sources(t), "")
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if d.Salutation != v.Salutation {
+		t.Errorf("salutation = %q, want the rendered one", d.Salutation)
+	}
+	if !strings.HasPrefix(d.Text(), v.Salutation) {
+		t.Error("the rendered letter does not open with the rendered salutation")
+	}
+	// The model is told which line to use as well, so the body is written
+	// to agree with it.
+	if !strings.Contains(f.Calls[0].Prompt, "Guten Tag Kim Weber,") {
+		t.Error("the salutation did not reach the prompt")
+	}
+}
+
+// Without them the model is given the rule instead, which is what a
+// caller with no style file gets.
+func TestWithoutFixedLinesTheModelIsGivenTheRule(t *testing.T) {
+	f := fake(t, goodDraft)
+	v := Vacancy{Title: "Backend", Company: "Testfirma", ContactFirstName: "Kim", ContactLastName: "Weber"}
+
+	d, _, err := Write(context.Background(), f, v, passing(), nil, sources(t), "")
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if d.Salutation != "Sehr geehrte Frau Beispiel," {
+		t.Errorf("the model's own salutation was replaced with %q", d.Salutation)
+	}
+	if !strings.Contains(f.Calls[0].Prompt, "do not guess") {
+		t.Error("the rule did not reach the prompt")
+	}
+}

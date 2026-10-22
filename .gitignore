@@ -33,7 +33,6 @@
 !/.githooks/**
 
 # --- planning artifacts ---
-!/SPEC.md
 !/openspec/**
 
 # --- example artifacts: invented contents, published to show the formats ---

@@ -23,11 +23,34 @@
 # opening. That should not be a code change, which is why it lives here.
 
 # ---------------------------------------------------------------------------
+# Who the letter is from
+#
+# This is the printed return address, not a source. Nothing in the body may
+# cite it: what the letter may claim comes from profile.yaml and
+# inventory.yaml, and the fact lock checks every sentence against those. The
+# name is also what the saved file is named after.
+#
+# `lines` may be left empty. A letter sent as an email attachment carries the
+# address in the mail; one sent on paper does not.
+# ---------------------------------------------------------------------------
+sender:
+  name: Alex Beispiel
+  lines:
+    - Alex Beispiel
+    - Musterweg 2, 79100 Freiburg
+    - alex@example.org
+
+# ---------------------------------------------------------------------------
 # Register and the fixed parts of the letter (SPEC.md §13.2)
+#
+# These lines are rendered by code and written into the draft, not asked of
+# the model. A greeting is a template with slots, and the most visible line
+# of a letter is a poor place to find out that a model inflected a surname.
 # ---------------------------------------------------------------------------
 languages:
   de:
     address_as: Sie          # never du, at any seniority
+    subject: "Bewerbung als {title}"
     salutation:
       gendered_female: "Sehr geehrte Frau {last_name},"
       gendered_male: "Sehr geehrter Herr {last_name},"
@@ -40,6 +63,7 @@ languages:
 
   en:
     address_as: you
+    subject: "Application for {title}"
     salutation:
       gendered_female: "Dear Ms {last_name},"
       gendered_male: "Dear Mr {last_name},"

@@ -56,6 +56,15 @@ type Vacancy struct {
 	ContactLastName  string
 	ContactGender    string // "f", "m" or "" when the advertisement does not say
 	AdText           string
+
+	// Salutation and Closing are the fixed lines, rendered from the style
+	// file before the call. When they are set the model is told to use
+	// them exactly and the draft's own are replaced with them afterwards:
+	// a greeting is a template with slots, and asking a model to fill one
+	// in is a way to get the most visible line of the letter wrong. Left
+	// empty, the model is given the rule instead and writes its own.
+	Salutation string
+	Closing    string
 }
 
 // Sentence is one claim and the ids that support it.
@@ -256,6 +265,17 @@ func Write(ctx context.Context, c llm.Client, v Vacancy, result scoring.Result, 
 	}
 	if err := d.Check(src); err != nil {
 		return nil, resp, err
+	}
+
+	// Replaced rather than validated. The model was asked for these lines
+	// and may still return a near miss - a comma dropped, a name
+	// inflected - and a near miss in the greeting is what a reader
+	// notices first.
+	if v.Salutation != "" {
+		d.Salutation = v.Salutation
+	}
+	if v.Closing != "" {
+		d.Closing = v.Closing
 	}
 	return &d, resp, nil
 }

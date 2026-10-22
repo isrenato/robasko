@@ -79,9 +79,16 @@ func vacancyPrompt(v Vacancy, reqs []scoring.Requirement) string {
 		fmt.Fprintf(&b, "Language of the advertisement: %s\n", v.Language)
 	}
 
-	b.WriteString("\nSalutation to use: ")
-	b.WriteString(salutationRule(v))
-	b.WriteString("\n")
+	if v.Salutation != "" {
+		fmt.Fprintf(&b, "\nSalutation, to be used exactly as written: %s\n", v.Salutation)
+	} else {
+		b.WriteString("\nSalutation to use: ")
+		b.WriteString(salutationRule(v))
+		b.WriteString("\n")
+	}
+	if v.Closing != "" {
+		fmt.Fprintf(&b, "Closing, to be used exactly as written: %s\n", v.Closing)
+	}
 
 	// Only the covered requirements are offered. The uncovered ones are
 	// withheld rather than marked, so there is nothing for the letter to
